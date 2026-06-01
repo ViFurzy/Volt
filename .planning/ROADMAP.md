@@ -29,7 +29,10 @@
   2. Raw read/write round-trip to the Logitech LIGHTSPEED dongle succeeds (bytes out, bytes back)
   3. sys.coinit_flags = 0 is confirmed as the first executable line in `__main__` before any import, and this is documented in a code comment explaining why
   4. The asyncio-background-thread + queue.Queue + Qt-main-thread pattern is sketched in a stub that starts, communicates one message, and shuts down cleanly
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Project bootstrap, requirements.txt, src/__main__.py (coinit_flags guard), src/hid_poc.py (enumerate + open_path + raw read/write)
+- [ ] 01-02-PLAN.md — src/threading_stub.py (asyncio background thread + queue.Queue + QTimer drain + clean shutdown)
 
 ### Phase 2: HID++ 2.0 Protocol
 **Goal**: Read a real battery percentage and charging status from the Logitech G Pro X Wireless via HID++ 2.0; handle all known protocol variants and offline edge cases
@@ -108,7 +111,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. HID Connectivity PoC | 0/? | Not started | - |
+| 1. HID Connectivity PoC | 0/2 | Planned | - |
 | 2. HID++ 2.0 Protocol | 0/? | Not started | - |
 | 3. MonitorService + DeviceRegistry | 0/? | Not started | - |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
@@ -132,3 +135,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
+*Last updated: 2026-06-01 — Phase 1 planned: 2 plans in 2 waves*
