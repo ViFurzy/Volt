@@ -44,7 +44,12 @@ Plans:
   3. Charging status is read and surfaced when the device reports it (bool or enum, not just battery %)
   4. When the mouse is switched off, HID++ error 5 is caught, battery returns None, and the device state is set to OFFLINE without crashing the polling loop
   5. Receiver device index is discovered from the paired-device list (index 0x01–0x0E); device index 0xFF is never used for device queries
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 02-01-PLAN.md — src/hidpp/protocol.py + src/hidpp/__init__.py + pytest bootstrap + hardware raw-byte offset confirmation (Wave 1)
+- [ ] 02-02-PLAN.md — src/hidpp/receiver.py: find_receiver, open_receiver, discover_device_index (Wave 2, parallel with 02-03)
+- [ ] 02-03-PLAN.md — src/hidpp/features.py: BatteryResult, get_feature_index, battery_probe_chain 0x1004/0x1000/0x1001 (Wave 2, parallel with 02-02)
+- [ ] 02-04-PLAN.md — src/query_battery.py: integration script, hardware end-to-end test (Wave 3)
 
 ### Phase 3: MonitorService + DeviceRegistry
 **Goal**: Battery data flows automatically from background polling to a UI-consumable queue; hot-plug events trigger device discovery and teardown without user action
@@ -112,7 +117,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
-| 2. HID++ 2.0 Protocol | 0/? | Not started | - |
+| 2. HID++ 2.0 Protocol | 0/4 | Not started | - |
 | 3. MonitorService + DeviceRegistry | 0/? | Not started | - |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
@@ -135,4 +140,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
-*Last updated: 2026-06-01 — Phase 1 planned: 2 plans in 2 waves*
+*Last updated: 2026-06-01 — Phase 2 planned: 4 plans in 3 waves*
