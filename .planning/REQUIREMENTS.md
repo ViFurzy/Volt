@@ -76,10 +76,10 @@
 | UI-01 | Phase 4 | Pending |
 | UI-02 | Phase 4 | Pending |
 | UI-03 | Phase 4 | Pending |
-| NOTIF-01 | Phase 7 | Pending |
-| NOTIF-02 | Phase 7 | Pending |
+| NOTIF-01 | Phase 6 | Pending |
+| NOTIF-02 | Phase 6 | Pending |
 | SYS-01 | Phase 4 | Pending |
-| SYS-02 | Phase 7 | Pending |
+| SYS-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 12 total
@@ -88,4 +88,4 @@
 
 ---
 *Requirements defined: 2026-06-01*
-*Last updated: 2026-06-01 after initial definition*
+*Last updated: 2026-06-01 after roadmap creation — corrected NOTIF-01/02 to Phase 6, SYS-02 to Phase 4*
