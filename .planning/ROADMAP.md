@@ -158,7 +158,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
-| 3. MonitorService + DeviceRegistry | 4/4 | ✓ Complete | 2026-06-02 |
+| 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
