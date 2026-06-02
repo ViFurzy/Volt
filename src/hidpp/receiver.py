@@ -32,32 +32,37 @@ DEVICE_IDX = 0xFF
 # Public API
 # ---------------------------------------------------------------------------
 
-def find_receiver(vid: int = LOGITECH_VID) -> list[dict]:
+def find_receiver(vid: int = LOGITECH_VID, verbose: bool = True) -> list[dict]:
     """
     Enumerate all HID interfaces for `vid` and return those with
     usage_page == VENDOR_USAGE_PAGE (0xFF43).
 
-    Prints every enumerated interface to stdout so PIDs are visible during
-    integration runs. Returns a list of matching dicts (may be empty).
+    When verbose=True (default), prints every enumerated interface to stdout so
+    PIDs are visible during integration runs. Pass verbose=False in background
+    polling to keep the 60s poll loop silent (WR-03).
+    Returns a list of matching dicts (may be empty).
     """
-    print(f"=== All Logitech (0x{vid:04X}) HID interfaces ===")
+    if verbose:
+        print(f"=== All Logitech (0x{vid:04X}) HID interfaces ===")
     all_devices = hid.enumerate(vid, 0)
 
     if not all_devices:
-        print("  (no devices found for this VID)")
+        if verbose:
+            print("  (no devices found for this VID)")
         return []
 
     for info in all_devices:
-        path = info["path"]
-        path_str = path.decode("utf-8", errors="replace") if isinstance(path, bytes) else repr(path)
-        print(
-            f"  PID=0x{info['product_id']:04X}  "
-            f"usage_page=0x{info['usage_page']:04X}  "
-            f"usage=0x{info['usage']:04X}  "
-            f"path={path_str}  "
-            f"manufacturer={info.get('manufacturer_string', '')}  "
-            f"product={info.get('product_string', '')}"
-        )
+        if verbose:
+            path = info["path"]
+            path_str = path.decode("utf-8", errors="replace") if isinstance(path, bytes) else repr(path)
+            print(
+                f"  PID=0x{info['product_id']:04X}  "
+                f"usage_page=0x{info['usage_page']:04X}  "
+                f"usage=0x{info['usage']:04X}  "
+                f"path={path_str}  "
+                f"manufacturer={info.get('manufacturer_string', '')}  "
+                f"product={info.get('product_string', '')}"
+            )
 
     vendor_interfaces = [d for d in all_devices if d["usage_page"] == VENDOR_USAGE_PAGE]
     return vendor_interfaces

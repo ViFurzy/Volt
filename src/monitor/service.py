@@ -1,0 +1,180 @@
+"""
+MonitorService — asyncio background-thread polling engine for PeriphWatcher.
+
+Owns the 60-second polling loop that discovers known devices, reads battery
+via the Phase 2 protocol layer, and pushes full DeviceState snapshots to a
+thread-safe queue.Queue for the Qt main thread to consume.
+
+Architecture invariants (from CLAUDE.md):
+  - All HID I/O runs exclusively on the asyncio background thread (self._loop).
+  - Cross-thread communication via queue.Queue only — never direct attribute reads
+    across threads for device state.
+  - hid device opens use open_receiver() via open_path() — never hid.open(vid, pid)
+    which risks opening the wrong interface.
+"""
+
+import asyncio
+import concurrent.futures
+import queue
+import threading
+
+from hidpp.receiver import (
+    DEVICE_IDX,
+    find_receiver,
+    open_receiver,
+)
+from hidpp.features import battery_probe_chain
+from monitor.registry import DeviceRegistry
+from monitor.state import KNOWN_DEVICES, DeviceState, DeviceStatus
+
+
+class MonitorService:
+    """Asyncio-based background polling engine.
+
+    Lifecycle:
+        service = MonitorService(ui_queue, registry)
+        service.start()   # launches daemon thread + schedules _poll_loop
+        ...
+        service.stop()    # shuts down gracefully
+
+    All HID calls happen inside coroutines running on self._loop (the bg thread).
+    The Qt main thread NEVER calls HID functions directly.
+
+    Thread-safe entry points for the main thread:
+        service.rescan()  — schedule a re-discovery (used by WM_DEVICECHANGE in 03-03)
+    """
+
+    def __init__(
+        self,
+        ui_queue: queue.Queue,
+        registry: DeviceRegistry,
+        poll_interval: float = 60.0,
+    ) -> None:
+        self._ui_queue = ui_queue
+        self._registry = registry
+        self.poll_interval = poll_interval
+        self._loop = asyncio.new_event_loop()
+        self._thread: threading.Thread | None = None
+        # Open HID device handles keyed by (vid, pid, dev_idx).
+        # Accessed exclusively on the bg asyncio thread.
+        self._open: dict[tuple[int, int, int], object] = {}
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Launch the daemon background thread and start the polling loop."""
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+        asyncio.run_coroutine_threadsafe(self._poll_loop(), self._loop)
+
+    def stop(self) -> None:
+        """Close all open handles and shut down the asyncio loop cleanly."""
+        for handle in list(self._open.values()):
+            try:
+                handle.close()
+            except Exception:
+                pass
+        self._open.clear()
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=5.0)
+
+    def rescan(self) -> concurrent.futures.Future:
+        """Thread-safe entry point for the hot-plug callback (03-03).
+
+        Schedules a new discover() run on the bg asyncio loop and returns the
+        Future so the caller can optionally wait or add callbacks.
+        """
+        return asyncio.run_coroutine_threadsafe(self.discover(), self._loop)
+
+    # ------------------------------------------------------------------
+    # Background thread entry point
+    # ------------------------------------------------------------------
+
+    def _run_loop(self) -> None:
+        """Run the asyncio event loop on the daemon thread (mirrors threading_stub)."""
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_forever()
+
+    # ------------------------------------------------------------------
+    # Coroutines (run on bg asyncio thread)
+    # ------------------------------------------------------------------
+
+    async def _poll_loop(self) -> None:
+        """Continuous polling coroutine: discover once, then poll every interval."""
+        await self.discover()
+        while True:
+            await self.poll_once()
+            await asyncio.sleep(self.poll_interval)
+
+    async def discover(self) -> None:
+        """Enumerate the receiver and register any KNOWN_DEVICES found.
+
+        Filters every returned interface against KNOWN_DEVICES (HID-03).
+        Opens a handle only if not already open, registers an initial ONLINE
+        DeviceState, and pushes it to the queue.
+        """
+        interfaces = find_receiver(verbose=False)
+        for info in interfaces:
+            vid = info["vendor_id"]
+            pid = info["product_id"]
+            if (vid, pid) not in KNOWN_DEVICES:
+                # T-03-05: never open or register unknown devices
+                continue
+            key = (vid, pid, DEVICE_IDX)
+            if key not in self._open:
+                try:
+                    handle = open_receiver(info)
+                except OSError:
+                    continue
+                self._open[key] = handle
+            device_name = KNOWN_DEVICES[(vid, pid)]
+            state = DeviceState(
+                vid=vid,
+                pid=pid,
+                dev_idx=DEVICE_IDX,
+                device_name=device_name,
+                percent=None,
+                charging=False,
+                status=DeviceStatus.ONLINE,
+            )
+            self._registry.upsert(state)
+            self._ui_queue.put(state)
+
+    async def poll_once(self) -> None:
+        """Read battery for all open devices and push snapshots to the queue.
+
+        On None result (device offline mid-session): mark OFFLINE, push
+        OFFLINE snapshot, close the handle, and remove it from self._open
+        (T-03-03: never re-poll a closed handle; wait for next hot-plug).
+        """
+        for key, handle in list(self._open.items()):
+            vid, pid, dev_idx = key
+            result = battery_probe_chain(handle, dev_idx)
+            if result is None:
+                # Device turned off or disconnected mid-session
+                offline_state = self._registry.mark_offline(key)
+                if offline_state is not None:
+                    self._ui_queue.put(offline_state)
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+                del self._open[key]
+            else:
+                # D-03: charging=True → CHARGING; else → ONLINE
+                status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
+                device_name = KNOWN_DEVICES.get((vid, pid), "Unknown")
+                state = DeviceState(
+                    vid=vid,
+                    pid=pid,
+                    dev_idx=dev_idx,
+                    device_name=device_name,
+                    percent=result.percent,
+                    charging=result.charging,
+                    status=status,
+                )
+                self._registry.upsert(state)
+                self._ui_queue.put(state)
