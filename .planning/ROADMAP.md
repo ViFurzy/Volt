@@ -11,7 +11,7 @@
 - [x] **Phase 1: HID Connectivity PoC** - Prove Windows HID access via vendor-specific usage page; establish threading foundation *(complete 2026-06-01)*
 - [x] **Phase 2: HID++ 2.0 Protocol** - Logitech feature discovery, battery probe chain, offline handling; battery data flows to stdout *(complete 2026-06-02)*
 - [x] **Phase 3: MonitorService + DeviceRegistry** - Asyncio background thread, 60s polling loop, hot-plug detection, queue-based updates (completed 2026-06-02)
-- [ ] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence
+- [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
 - [ ] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic
 - [ ] **Phase 7: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
@@ -121,7 +121,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 04-04-PLAN.md — tests/test_ui_integration.py + hardware checkpoint: end-to-end verification of UI-01/02/03, SYS-01/02 (autonomous: false)
+- [x] 04-04-PLAN.md — tests/test_ui_integration.py + hardware checkpoint: end-to-end verification of UI-01/02/03, SYS-01/02 (autonomous: false)
 
 **UI hint**: yes
 
@@ -176,7 +176,7 @@ Plans:
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
 | 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
-| 4. Qt UI — Window + Tray | 3/4 | In Progress|  |
+| 4. Qt UI — Window + Tray | 4/4 | Complete   | 2026-06-02 |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
 | 7. Packaging + Distribution | 0/? | Not started | - |

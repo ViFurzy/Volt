@@ -19,9 +19,9 @@
 
 ### UI
 
-- [ ] **UI-01**: Main window lists all monitored devices with their name, battery %, and charging status
-- [ ] **UI-02**: Closing the main window minimizes the app to the system tray (does not quit)
-- [ ] **UI-03**: System tray icon is present when app is running; double-clicking or using the context menu restores the main window
+- [x] **UI-01**: Main window lists all monitored devices with their name, battery %, and charging status
+- [x] **UI-02**: Closing the main window minimizes the app to the system tray (does not quit)
+- [x] **UI-03**: System tray icon is present when app is running; double-clicking or using the context menu restores the main window
 
 ### Notifications
 
@@ -73,9 +73,9 @@
 | HID-04 | Phase 3 | Complete |
 | BATT-01 | Phase 2 | Complete |
 | BATT-02 | Phase 2 | Complete |
-| UI-01 | Phase 4 | Pending |
-| UI-02 | Phase 4 | Pending |
-| UI-03 | Phase 4 | Pending |
+| UI-01 | Phase 4 | Complete |
+| UI-02 | Phase 4 | Complete |
+| UI-03 | Phase 4 | Complete |
 | NOTIF-01 | Phase 6 | Pending |
 | NOTIF-02 | Phase 6 | Pending |
 | SYS-01 | Phase 4 | Complete |
