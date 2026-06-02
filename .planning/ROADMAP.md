@@ -76,7 +76,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — src/monitor/state.py + registry.py: DeviceState, DeviceStatus, KNOWN_DEVICES, thread-safe DeviceRegistry (Wave 1)
+- [x] 03-01-PLAN.md — src/monitor/state.py + registry.py: DeviceState, DeviceStatus, KNOWN_DEVICES, thread-safe DeviceRegistry (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -158,7 +158,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
-| 3. MonitorService + DeviceRegistry | 0/4 | Planned | - |
+| 3. MonitorService + DeviceRegistry | 1/4 | In Progress|  |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
