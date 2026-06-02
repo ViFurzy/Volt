@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.device_card import DeviceCard
 from ui.settings_page import SettingsPage
 from ui.sidebar import SidebarNav
 
@@ -113,17 +114,25 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def on_device_update(self, state: DeviceState) -> None:
-        """Wave 3 (04-03) implements card create/update here.
+        """Create or update the DeviceCard for the given DeviceState.
 
         Called by the main-thread QTimer drain when a DeviceState arrives
         from the background asyncio thread via queue.Queue (architecture
         invariant: all Qt widget mutation on main thread only).
 
-        Wave 3 will:
-          1. Look up self._cards[(state.vid, state.pid, state.dev_idx)].
-          2. Create a DeviceCard if absent, add to self.dashboard_layout.
-          3. Call card.update_state(state) to refresh text and colour.
+        First call for a (vid, pid, dev_idx) key creates a DeviceCard and
+        inserts it into dashboard_layout before the trailing stretch.
+        Subsequent calls update the existing card in place — no duplicates.
         """
+        key = (state.vid, state.pid, state.dev_idx)
+        if key not in self._cards:
+            card = DeviceCard(state)
+            self._cards[key] = card
+            # Insert before the trailing stretch item so cards stack top-down
+            stretch_idx = self.dashboard_layout.count() - 1
+            self.dashboard_layout.insertWidget(stretch_idx, card)
+        else:
+            self._cards[key].update_state(state)
 
 
 class _PlaceholderPage(QWidget):
