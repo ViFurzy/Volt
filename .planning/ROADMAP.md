@@ -117,7 +117,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-03-PLAN.md — src/ui/device_card.py + on_device_update: live device cards with threshold colors (UI-01)
+- [x] 04-03-PLAN.md — src/ui/device_card.py + on_device_update: live device cards with threshold colors (UI-01)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -176,7 +176,7 @@ Plans:
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
 | 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
-| 4. Qt UI — Window + Tray | 2/4 | In Progress|  |
+| 4. Qt UI — Window + Tray | 3/4 | In Progress|  |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
 | 7. Packaging + Distribution | 0/? | Not started | - |
