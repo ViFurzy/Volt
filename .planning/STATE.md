@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 02
-current_plan: 1
-status: executing
-last_updated: "2026-06-02T11:31:00.746Z"
+current_plan: 4
+status: checkpoint
+last_updated: "2026-06-02T11:49:00Z"
 progress:
   total_phases: 7
   completed_phases: 1
@@ -28,20 +28,20 @@ progress:
 ## Current Position
 
 **Current Phase:** 02
-**Current Plan:** 1
-**Status:** Executing Phase 02
+**Current Plan:** 4
+**Status:** Checkpoint — hardware verification required (Task 2 of plan 02-04)
 
 **Progress:**
 
 ```
-Phase: 02 (hidpp-20-protocol) — EXECUTING
-Plan: 1 of 4
+Phase: 02 (hidpp-20-protocol) — CHECKPOINT (awaiting hardware test)
+Plan: 4 of 4
         1  2  3  4  5  6  7
            ^
 ```
 
 **Phases complete:** 1/7
-**Plans complete:** 2 (across all phases)
+**Plans complete:** 3 (across all phases)
 
 ---
 
@@ -106,19 +106,20 @@ Plan: 1 of 4
 
 ## Session Continuity
 
-**Last session:** 2026-06-01 — Phase 1 complete
-**Next action:** `/gsd:plan-phase 2` — plan Phase 2: HID++ 2.0 Protocol
+**Last session:** 2026-06-02 — Phase 2 plan 02-04 Task 1 complete; checkpoint at Task 2 (hardware)
+**Next action:** Run hardware checkpoint tests (TEST A/B/C) then resume `/gsd:execute-phase 2`
 
 ### Handoff Note
 
-Phase 1 complete. Both architecture risks resolved:
+Phase 2 plan 02-04: query_battery.py created and committed (1d86638).
+Full chain wired: find_receiver → open_receiver → discover_device_index → battery_probe_chain.
 
-1. ✓ HID access via usage_page=0xFF00 confirmed on real hardware (PRO X Wireless Headset, PID=0x0ABA)
-2. ✓ sys.coinit_flags=0 invariant enforced in both __main__.py and threading_stub.py
-3. ✓ asyncio + queue.Queue + QTimer threading pattern proven end-to-end
+BLOCKED at Task 2 hardware checkpoint. User must run:
+- TEST A: no dongle → expect exit 1, no traceback
+- TEST B: headset ON → expect Battery: XX% — not charging (feature 0x06/0x0D)
+- TEST C: headset OFF → expect Battery: OFFLINE (device did not respond)
 
-Phase 2 focus: HID++ 2.0 protocol. Read battery from Logitech G Pro X Wireless.
-Key: probe feature chain 0x1004 → 0x1000 → 0x1001. Discover device index at runtime via Root feature 0x0000.
+After all 3 tests pass, Phase 2 is complete (HID-01, BATT-01, BATT-02 satisfied).
 
 ---
 *Created: 2026-06-01*
