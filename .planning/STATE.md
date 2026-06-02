@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 02
+current_plan: 1
+status: executing
+last_updated: "2026-06-02T11:31:00.746Z"
+progress:
+  total_phases: 7
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 3
+  percent: 14
+---
+
 # State: PeriphWatcher
 
 ## Project Reference
@@ -11,13 +27,15 @@
 
 ## Current Position
 
-**Current Phase:** 2 — HID++ 2.0 Protocol
-**Current Plan:** None started
-**Status:** Phase 1 complete — ready for Phase 2
+**Current Phase:** 02
+**Current Plan:** 1
+**Status:** Executing Phase 02
 
 **Progress:**
+
 ```
-Phase: [✓][2][ ][ ][ ][ ][ ]
+Phase: 02 (hidpp-20-protocol) — EXECUTING
+Plan: 1 of 4
         1  2  3  4  5  6  7
            ^
 ```
@@ -94,6 +112,7 @@ Phase: [✓][2][ ][ ][ ][ ][ ]
 ### Handoff Note
 
 Phase 1 complete. Both architecture risks resolved:
+
 1. ✓ HID access via usage_page=0xFF00 confirmed on real hardware (PRO X Wireless Headset, PID=0x0ABA)
 2. ✓ sys.coinit_flags=0 invariant enforced in both __main__.py and threading_stub.py
 3. ✓ asyncio + queue.Queue + QTimer threading pattern proven end-to-end
