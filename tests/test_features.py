@@ -1,6 +1,7 @@
 """Tests for G Pro X Wireless battery reading via G-series headset protocol (feature 0x06/0x0D)."""
 import pytest
 from hidpp.features import battery_probe_chain, BatteryResult, voltage_to_percent
+from hidpp.protocol import HIDppError
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +39,13 @@ def test_voltage_to_percent_interpolation():
 
 def test_timeout_returns_none(mock_hid):
     mock_hid.read.return_value = []
+    result = battery_probe_chain(mock_hid, 0xFF)
+    assert result is None
+
+
+def test_offline_error_returns_none(mock_hid):
+    # Device sends HID++ error 0x05 (ERROR_OFFLINE) when headset is off
+    mock_hid.read.return_value = [0x10, 0xFF, 0xFF, 0x00, 0x00, 0x05, 0x00] + [0x00] * 13
     result = battery_probe_chain(mock_hid, 0xFF)
     assert result is None
 

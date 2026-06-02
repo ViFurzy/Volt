@@ -8,7 +8,7 @@ G-series headset command using feature 0x06, function 0x0D.
 
 from dataclasses import dataclass
 
-from hidpp.protocol import send_and_recv
+from hidpp.protocol import send_and_recv, HIDppError
 
 # (mV, percent) calibration points for G Pro X Wireless from HeadsetControl reference
 _CALIB = [(3320, 0), (3670, 5), (3740, 20), (3780, 30), (3830, 50), (4150, 100)]
@@ -43,7 +43,10 @@ def battery_probe_chain(device, device_idx: int) -> "BatteryResult | None":
     device_idx should be 0xFF (receiver device index for G-series headsets).
     """
     cmd = [0x11, device_idx, 0x06, 0x0D] + [0x00] * 16
-    result = send_and_recv(device, cmd, min_len=7)
+    try:
+        result = send_and_recv(device, cmd, min_len=7)
+    except HIDppError:
+        return None
     if result is None:
         return None
     voltage_mv = (result[4] << 8) | result[5]
