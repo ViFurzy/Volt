@@ -45,7 +45,7 @@ def battery_probe_chain(device, device_idx: int) -> "BatteryResult | None":
     cmd = [0x11, device_idx, 0x06, 0x0D] + [0x00] * 16
     try:
         result = send_and_recv(device, cmd, min_len=7)
-    except HIDppError:
+    except (HIDppError, OSError):
         return None
     if result is None:
         return None
