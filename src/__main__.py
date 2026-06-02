@@ -1,7 +1,14 @@
 import sys
 sys.coinit_flags = 0  # MUST be here — before any other import. pythoncom reads this flag exactly once on first COM init. PySide6/pywin32 imports initialize COM as STA; bleak WinRT backend requires MTA. If STA is set first, await client.connect() hangs forever silently.
 
+import os
 import signal
+
+# When run as `python -m src`, Python adds the project root to sys.path but not
+# the src/ directory itself. Add src/ so that monitor.*, ui.*, hidpp.* are importable.
+_src_dir = os.path.dirname(os.path.abspath(__file__))
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
