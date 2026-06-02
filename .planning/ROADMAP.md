@@ -80,7 +80,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — src/monitor/service.py: MonitorService asyncio 60s poll loop, discover/poll_once, find_receiver verbose flag (Wave 2)
+- [x] 03-02-PLAN.md — src/monitor/service.py: MonitorService asyncio 60s poll loop, discover/poll_once, find_receiver verbose flag (Wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -158,7 +158,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
-| 3. MonitorService + DeviceRegistry | 1/4 | In Progress|  |
+| 3. MonitorService + DeviceRegistry | 2/4 | In Progress|  |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
