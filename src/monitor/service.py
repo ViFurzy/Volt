@@ -186,33 +186,42 @@ class MonitorService:
     async def poll_once(self) -> None:
         """Read battery for all open devices and push snapshots to the queue.
 
-        On None result (device offline mid-session): mark OFFLINE, push
-        OFFLINE snapshot, close the handle, and remove it from self._open
-        (T-03-03: never re-poll a closed handle; wait for next hot-plug).
+        On None result or 0% (headset off or transitioning): mark OFFLINE but
+        KEEP the handle open. This allows automatic recovery when the headset
+        powers back on without the dongle being replugged — the next poll cycle
+        will detect the live reading and transition back to ONLINE.
+
+        Handles are only closed by discover() when the dongle is physically
+        unplugged (fast-path via WM_DEVICECHANGE).
+
+        percent=0 is treated as offline because:
+        - The G Pro X calibration floor is 3320 mV; 0 mV is a transient reading
+          as the headset powers down, not a genuine empty battery.
+        - Genuine 0% battery means the headset has already shut down.
         """
         for key, handle in list(self._open.items()):
             vid, pid, dev_idx = key
             result = battery_probe_chain(handle, dev_idx)
-            if result is None:
-                # Device turned off or disconnected mid-session
+            if result is None or result.percent == 0:
+                # Headset off, transitioning, or zero-voltage transient — mark
+                # OFFLINE but keep handle so recovery is automatic on next poll.
                 offline_state = self._registry.mark_offline(key)
                 if offline_state is not None:
                     self._ui_queue.put(offline_state)
-                try:
-                    handle.close()
-                except Exception:
-                    pass
-                del self._open[key]
             else:
                 # D-03: charging=True → CHARGING; else → ONLINE
                 status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
+                # During CHARGING, hide the voltage-elevated % (charger current
+                # inflates voltage to ~4.2 V regardless of actual charge state).
+                # Show None so the UI renders "CHARGING" without a misleading %.
+                percent = None if result.charging else result.percent
                 device_name = KNOWN_DEVICES.get((vid, pid), "Unknown")
                 state = DeviceState(
                     vid=vid,
                     pid=pid,
                     dev_idx=dev_idx,
                     device_name=device_name,
-                    percent=result.percent,
+                    percent=percent,
                     charging=result.charging,
                     status=status,
                 )

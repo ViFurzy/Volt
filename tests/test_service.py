@@ -198,17 +198,22 @@ class TestPollOnce:
         queued = ui_queue.get_nowait()
         assert queued.status == DeviceStatus.CHARGING
 
-    def test_none_result_marks_offline_and_removes_handle(self, mocker):
-        """poll_once() with battery_probe_chain=None marks OFFLINE, closes handle, clears _open."""
+    def test_none_result_marks_offline_keeps_handle(self, mocker):
+        """poll_once() with battery_probe_chain=None marks OFFLINE but keeps handle open.
+
+        The handle is kept so the next poll cycle can detect recovery when the
+        headset turns back on without the dongle being replugged. Handles are
+        only closed by discover() when the dongle is physically unplugged.
+        """
         service, mock_handle, ui_queue, registry = self._setup_with_open_device(mocker)
 
         mocker.patch("monitor.service.battery_probe_chain", return_value=None)
 
         asyncio.run(service.poll_once())
 
-        # Handle removed from _open
-        assert GPRO_KEY not in service._open
-        mock_handle.close.assert_called_once()
+        # Handle KEPT in _open (recovery without replug)
+        assert GPRO_KEY in service._open
+        mock_handle.close.assert_not_called()
 
         # Registry shows OFFLINE
         state = registry.get(GPRO_KEY)
@@ -230,8 +235,8 @@ class TestPollOnce:
 
         asyncio.run(service.poll_once())
 
-        # Handle still removed
-        assert GPRO_KEY not in service._open
+        # Handle KEPT (new contract — only discover() closes handles)
+        assert GPRO_KEY in service._open
         # Queue empty (mark_offline returned None → no put)
         assert ui_queue.empty()
 
