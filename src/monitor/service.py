@@ -55,6 +55,7 @@ class MonitorService:
         self.poll_interval = poll_interval
         self._loop = asyncio.new_event_loop()
         self._thread: threading.Thread | None = None
+        self._poll_task: asyncio.Task | None = None
         # Open HID device handles keyed by (vid, pid, dev_idx).
         # Accessed exclusively on the bg asyncio thread.
         self._open: dict[tuple[int, int, int], object] = {}
@@ -67,10 +68,17 @@ class MonitorService:
         """Launch the daemon background thread and start the polling loop."""
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        asyncio.run_coroutine_threadsafe(self._poll_loop(), self._loop)
+        asyncio.run_coroutine_threadsafe(self._start_poll_loop(), self._loop)
+
+    async def _start_poll_loop(self) -> None:
+        """Schedule _poll_loop as a tracked Task so stop() can cancel it cleanly."""
+        self._poll_task = asyncio.ensure_future(self._poll_loop())
 
     def stop(self) -> None:
         """Close all open handles and shut down the asyncio loop cleanly."""
+        # Cancel the poll task first so asyncio doesn't warn about pending tasks.
+        if self._poll_task is not None:
+            self._loop.call_soon_threadsafe(self._poll_task.cancel)
         for handle in list(self._open.values()):
             try:
                 handle.close()
@@ -110,25 +118,44 @@ class MonitorService:
             await asyncio.sleep(self.poll_interval)
 
     async def discover(self) -> None:
-        """Enumerate the receiver and register any KNOWN_DEVICES found.
+        """Enumerate receivers, open new ones, and immediately mark disappeared ones OFFLINE.
 
-        Filters every returned interface against KNOWN_DEVICES (HID-03).
-        Opens a handle only if not already open, registers an initial ONLINE
-        DeviceState, and pushes it to the queue.
+        Called on startup and on every WM_DEVICECHANGE (via rescan()). Because it runs on
+        both plug AND unplug events, it serves as the fast unplug detector: any handle in
+        self._open whose device is no longer enumerable is closed and marked OFFLINE here,
+        without waiting for the next poll_once() cycle.
         """
         interfaces = find_receiver(verbose=False)
+
+        # Build the set of currently-enumerable known-device keys.
+        found_keys: set[tuple[int, int, int]] = set()
+        for info in interfaces:
+            vid = info["vendor_id"]
+            pid = info["product_id"]
+            if (vid, pid) in KNOWN_DEVICES:
+                found_keys.add((vid, pid, DEVICE_IDX))
+
+        # Mark any open handle that disappeared as OFFLINE immediately (HID-04 fast path).
+        for key in list(self._open.keys()):
+            if key not in found_keys:
+                offline_state = self._registry.mark_offline(key)
+                if offline_state is not None:
+                    self._ui_queue.put(offline_state)
+                try:
+                    self._open[key].close()
+                except Exception:
+                    pass
+                del self._open[key]
+
+        # Open handles for newly-appeared known devices.
         for info in interfaces:
             vid = info["vendor_id"]
             pid = info["product_id"]
             if (vid, pid) not in KNOWN_DEVICES:
-                # T-03-05: never open or register unknown devices
                 continue
             key = (vid, pid, DEVICE_IDX)
             if key in self._open:
-                # Handle already open — poll_once() owns state updates for live devices.
-                # Re-pushing ONLINE here clobbers real percent/CHARGING state and
-                # produces a false ONLINE+None% when WM_DEVICECHANGE fires during unplug.
-                continue
+                continue  # already open; poll_once() owns live state
             try:
                 handle = open_receiver(info)
             except OSError:
