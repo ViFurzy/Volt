@@ -9,7 +9,7 @@
 ## Phases
 
 - [x] **Phase 1: HID Connectivity PoC** - Prove Windows HID access via vendor-specific usage page; establish threading foundation *(complete 2026-06-01)*
-- [ ] **Phase 2: HID++ 2.0 Protocol** - Logitech feature discovery, battery probe chain, offline handling; battery data flows to stdout
+- [x] **Phase 2: HID++ 2.0 Protocol** - Logitech feature discovery, battery probe chain, offline handling; battery data flows to stdout *(complete 2026-06-02)*
 - [ ] **Phase 3: MonitorService + DeviceRegistry** - Asyncio background thread, 60s polling loop, hot-plug detection, queue-based updates
 - [ ] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
@@ -49,7 +49,7 @@ Plans:
 - [x] 02-01-PLAN.md — src/hidpp/protocol.py + src/hidpp/__init__.py + pytest bootstrap + hardware raw-byte offset confirmation (Wave 1)
 - [x] 02-02-PLAN.md — src/hidpp/receiver.py: find_receiver, open_receiver, discover_device_index (Wave 2, parallel with 02-03)
 - [x] 02-03-PLAN.md — src/hidpp/features.py: BatteryResult, get_feature_index, battery_probe_chain 0x1004/0x1000/0x1001 (Wave 2, parallel with 02-02)
-- [ ] 02-04-PLAN.md — src/query_battery.py: integration script, hardware end-to-end test (Wave 3)
+- [x] 02-04-PLAN.md — src/query_battery.py: integration script, hardware end-to-end test (Wave 3)
 
 ### Phase 3: MonitorService + DeviceRegistry
 **Goal**: Battery data flows automatically from background polling to a UI-consumable queue; hot-plug events trigger device discovery and teardown without user action
@@ -117,7 +117,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
-| 2. HID++ 2.0 Protocol | 3/4 | In Progress|  |
+| 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
 | 3. MonitorService + DeviceRegistry | 0/? | Not started | - |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
