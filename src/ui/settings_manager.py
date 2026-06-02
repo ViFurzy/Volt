@@ -86,12 +86,22 @@ def battery_color(percent: int | None) -> str:
 # ---------------------------------------------------------------------------
 
 def _get_exe_path() -> str:
-    """Return the exe path wrapped in outer double-quotes.
+    """Return the launch command wrapped in outer double-quotes.
 
+    In dev mode (python.exe): includes '-m src' so Windows actually launches
+    the app at login. In packaged mode (Phase 7), sys.executable IS the app
+    exe and no extra args are needed.
     Quoting is required so Windows handles paths with spaces correctly (Pitfall 4).
-    In dev mode sys.executable is python.exe; the packaged exe is Phase 7 (A3).
     """
-    return f'"{sys.executable}"'
+    exe = sys.executable
+    if exe.lower().endswith("python.exe") or exe.lower().endswith("python3.exe"):
+        # Dev mode — must include the module argument
+        import os
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(src_dir)
+        return f'"{exe}" -m src'
+    # Packaged exe — path only
+    return f'"{exe}"'
 
 
 def set_startup(enabled: bool) -> None:
@@ -102,12 +112,15 @@ def set_startup(enabled: bool) -> None:
     was not present.
     """
     if enabled:
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            RUN_KEY,
-            access=winreg.KEY_WRITE,
-        ) as key:
-            winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, _get_exe_path())
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                RUN_KEY,
+                access=winreg.KEY_WRITE,
+            ) as key:
+                winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, _get_exe_path())
+        except OSError:
+            pass  # registry write failed — UI checkbox state and registry may diverge
     else:
         try:
             with winreg.OpenKey(

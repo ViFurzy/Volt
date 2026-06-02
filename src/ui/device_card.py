@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QVBoxLayout
 
 from monitor.state import DeviceStatus
 from ui.settings_manager import battery_color
@@ -110,8 +110,12 @@ class DeviceCard(QFrame):
         self._charging_indicator.setVisible(state.charging)
 
         # Offline muting via Qt property (enables QSS [offline="true"] selector)
+        # and QGraphicsOpacityEffect (QSS `opacity` is not a valid property — WR-04).
         is_offline = state.status == DeviceStatus.OFFLINE
         self.setProperty("offline", is_offline)
+        effect = QGraphicsOpacityEffect(self)
+        effect.setOpacity(0.45 if is_offline else 1.0)
+        self.setGraphicsEffect(effect)
         # Re-polish so QSS picks up the property change
         self.style().unpolish(self)
         self.style().polish(self)

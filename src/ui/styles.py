@@ -109,6 +109,6 @@ QFrame#deviceCard {
 QFrame#deviceCard[offline="true"] {
     background-color: #1e2030;
     border-color: #2a2d45;
-    opacity: 0.6;
+    /* opacity is not a valid QSS property — dimming applied via QGraphicsOpacityEffect in device_card.py */
 }
 """

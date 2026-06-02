@@ -134,9 +134,10 @@ def test_set_startup_enabled_calls_setvalueex(mocker):
     args = mock_set.call_args[0]
     assert args[1] == "PeriphWatcher"
     assert args[3] == winreg.REG_SZ
-    # Value must be wrapped in outer double-quotes
+    # Value must start with a double-quoted exe path
+    # Dev mode: '"python.exe" -m src'; packaged: '"app.exe"'
     exe_value = args[4]
-    assert exe_value.startswith('"') and exe_value.endswith('"')
+    assert exe_value.startswith('"')
 
 
 def test_set_startup_disabled_calls_deletevalue(mocker):
