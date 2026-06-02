@@ -179,5 +179,11 @@ class HotPlugWatcher(QWidget):
         self._service._loop.call_soon_threadsafe(self._debouncer.schedule)
 
     def _fire_rescan(self) -> None:
-        """Runs on the asyncio loop after the debounce window; triggers service.rescan()."""
-        self._service.rescan()
+        """Runs on the asyncio loop after the debounce window; schedules discover().
+
+        Called by _Debouncer._fire() via call_later — already on the bg asyncio loop.
+        Must use asyncio.ensure_future() here, NOT run_coroutine_threadsafe(): the latter
+        is for cross-thread scheduling and is incorrect (and potentially deadlock-prone)
+        when called from within the loop thread itself (CR-02).
+        """
+        asyncio.ensure_future(self._service.discover())

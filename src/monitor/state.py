@@ -23,7 +23,7 @@ class DeviceStatus(enum.Enum):
     CHARGING = enum.auto()
 
 
-@dataclass
+@dataclass(frozen=True)
 class DeviceState:
     """Full snapshot of one peripheral's current state (D-01, D-02).
 

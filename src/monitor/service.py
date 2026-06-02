@@ -75,17 +75,26 @@ class MonitorService:
         self._poll_task = asyncio.ensure_future(self._poll_loop())
 
     def stop(self) -> None:
-        """Close all open handles and shut down the asyncio loop cleanly."""
-        # Cancel the poll task first so asyncio doesn't warn about pending tasks.
-        if self._poll_task is not None:
-            self._loop.call_soon_threadsafe(self._poll_task.cancel)
-        for handle in list(self._open.values()):
-            try:
-                handle.close()
-            except Exception:
-                pass
-        self._open.clear()
-        self._loop.call_soon_threadsafe(self._loop.stop)
+        """Close all open handles and shut down the asyncio loop cleanly.
+
+        All mutations of self._open are routed through the bg loop via a single
+        call_soon_threadsafe callback. This prevents the data race where the Qt
+        main thread and the asyncio bg thread both access self._open concurrently
+        (CR-01: stop() previously iterated self._open directly from the main thread
+        while poll_once() or discover() could be running on the bg thread).
+        """
+        def _shutdown() -> None:
+            if self._poll_task is not None:
+                self._poll_task.cancel()
+            for handle in list(self._open.values()):
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+            self._open.clear()
+            self._loop.stop()
+
+        self._loop.call_soon_threadsafe(_shutdown)
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=5.0)
 
