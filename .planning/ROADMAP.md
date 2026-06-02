@@ -105,7 +105,24 @@ Plans:
   4. A "Launch at startup" toggle in the UI writes or removes the app path in HKCU\Software\Microsoft\Windows\CurrentVersion\Run without requiring admin rights
   5. Per-device notification thresholds and cooldown settings are saved to a JSON config file on disk and loaded correctly on next app launch
 
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — src/ui/settings_manager.py: JSON config (%APPDATA%) + winreg HKCU startup; pytest-qt setup (SYS-01, SYS-02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — src/ui/{styles,sidebar,settings_page,tray,main_window}.py + real __main__.py: dark theme, sidebar nav, close-to-tray, tray restore, startup toggle (UI-02, UI-03, SYS-01)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-03-PLAN.md — src/ui/device_card.py + on_device_update: live device cards with threshold colors (UI-01)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 04-04-PLAN.md — tests/test_ui_integration.py + hardware checkpoint: end-to-end verification of UI-01/02/03, SYS-01/02 (autonomous: false)
+
 **UI hint**: yes
 
 ### Phase 5: SteelSeries HID Backend
