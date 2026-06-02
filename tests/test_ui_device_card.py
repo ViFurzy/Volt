@@ -191,18 +191,22 @@ class TestDeviceCardOfflineMuting:
 
 class TestDeviceCardChargingIndicator:
     def test_charging_true_shows_indicator(self, qapp):
-        """Charging indicator must be visible when charging is True."""
+        """Charging indicator must not be hidden when charging is True.
+
+        Uses isHidden() because parent is not shown in headless tests —
+        isVisible() requires the parent chain to be shown.
+        """
         from ui.device_card import DeviceCard
         state = _make_state(75, DeviceStatus.CHARGING, charging=True)
         card = DeviceCard(state)
-        assert card._charging_indicator.isVisible()
+        assert not card._charging_indicator.isHidden()
 
     def test_charging_false_hides_indicator(self, qapp):
         """Charging indicator must be hidden when charging is False."""
         from ui.device_card import DeviceCard
         state = _make_state(80, DeviceStatus.ONLINE, charging=False)
         card = DeviceCard(state)
-        assert not card._charging_indicator.isVisible()
+        assert card._charging_indicator.isHidden()
 
     def test_update_state_toggles_charging_indicator(self, qapp):
         """update_state must show/hide charging indicator per state.charging."""
@@ -210,9 +214,9 @@ class TestDeviceCardChargingIndicator:
         state_not_charging = _make_state(80, DeviceStatus.ONLINE, charging=False)
         state_charging = _make_state(75, DeviceStatus.CHARGING, charging=True)
         card = DeviceCard(state_not_charging)
-        assert not card._charging_indicator.isVisible()
+        assert card._charging_indicator.isHidden()
         card.update_state(state_charging)
-        assert card._charging_indicator.isVisible()
+        assert not card._charging_indicator.isHidden()
 
 
 class TestDeviceCardUpdateState:

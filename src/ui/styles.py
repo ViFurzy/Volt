@@ -101,4 +101,14 @@ QScrollArea {
     border: none;
     background-color: #202535;
 }
+QFrame#deviceCard {
+    background-color: #262355;
+    border-radius: 8px;
+    border: 1px solid #3a3d55;
+}
+QFrame#deviceCard[offline="true"] {
+    background-color: #1e2030;
+    border-color: #2a2d45;
+    opacity: 0.6;
+}
 """
