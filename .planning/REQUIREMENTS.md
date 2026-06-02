@@ -30,8 +30,8 @@
 
 ### System Integration
 
-- [ ] **SYS-01**: App registers in Windows startup so it launches automatically at login, starting minimized to tray
-- [ ] **SYS-02**: User settings (per-device thresholds, cooldown period) persist to disk and survive restarts
+- [x] **SYS-01**: App registers in Windows startup so it launches automatically at login, starting minimized to tray
+- [x] **SYS-02**: User settings (per-device thresholds, cooldown period) persist to disk and survive restarts
 
 ## v2 Requirements
 
@@ -78,8 +78,8 @@
 | UI-03 | Phase 4 | Pending |
 | NOTIF-01 | Phase 6 | Pending |
 | NOTIF-02 | Phase 6 | Pending |
-| SYS-01 | Phase 4 | Pending |
-| SYS-02 | Phase 4 | Pending |
+| SYS-01 | Phase 4 | Complete |
+| SYS-02 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total

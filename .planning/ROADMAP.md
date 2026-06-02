@@ -109,7 +109,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — src/ui/settings_manager.py: JSON config (%APPDATA%) + winreg HKCU startup; pytest-qt setup (SYS-01, SYS-02)
+- [x] 04-01-PLAN.md — src/ui/settings_manager.py: JSON config (%APPDATA%) + winreg HKCU startup; pytest-qt setup (SYS-01, SYS-02)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -176,7 +176,7 @@ Plans:
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
 | 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
-| 4. Qt UI — Window + Tray | 0/? | Not started | - |
+| 4. Qt UI — Window + Tray | 1/4 | In Progress|  |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
 | 7. Packaging + Distribution | 0/? | Not started | - |
