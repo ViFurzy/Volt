@@ -1,22 +1,16 @@
 """
-Receiver enumeration and device index discovery for Logitech LIGHTSPEED dongles.
+Receiver enumeration for the G Pro X Wireless (G-series headset protocol).
 
-Provides three functions consumed by query_battery.py (Wave 3):
+Hardware-confirmed in 02-01: the dongle uses usage_page=0xFF43 (not 0xFF00),
+and the battery command targets device_idx=0xFF (the receiver itself).
+
+Provides three functions consumed by query_battery.py:
   - find_receiver(vid)         -> list of matching HID interface dicts
   - open_receiver(info)        -> open hid.device (caller owns lifetime)
-  - discover_device_index(dev) -> int | None (probes 0x01–0x06)
-
-OFFSET note (confirmed in 02-01-SUMMARY.md): response[0] IS the report ID byte.
-All byte indexing in this module uses 1-based data offsets accordingly.
-
-Hardware note: G Pro X Wireless (PID=0x0ABA) uses VENDOR_USAGE_PAGE=0xFF43 and
-device_idx=0xFF (the receiver itself). discover_device_index probes 0x01–0x06
-for generic HID++ 2.0 paired-device discovery; the G Pro X battery command uses
-0xFF directly (handled by query_battery.py, not here).
+  - discover_device_index(dev) -> int (returns DEVICE_IDX=0xFF, no probing)
 """
 
 import hid
-from hidpp.protocol import build_short_msg, send_and_recv, HIDppError
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -25,11 +19,13 @@ from hidpp.protocol import build_short_msg, send_and_recv, HIDppError
 LOGITECH_VID = 0x046D
 
 # 0xFF43 confirmed on G Pro X Wireless (PID=0x0ABA) via hardware probe (02-01).
-# Standard HID++ 2.0 uses 0xFF00; the G-series headset/mouse protocol uses 0xFF43.
+# Standard HID++ 2.0 uses 0xFF00; the G-series headset protocol uses 0xFF43.
 VENDOR_USAGE_PAGE = 0xFF43
 
-DEVICE_INDEX_MIN = 0x01
-DEVICE_INDEX_MAX = 0x06  # safe scan range for LIGHTSPEED single-device receivers
+# Fixed receiver device index for G-series headset protocol.
+# The G Pro X Wireless battery command targets the receiver itself (0xFF),
+# not a paired-device index — no per-device probing via Root 0x0000 is needed.
+DEVICE_IDX = 0xFF
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +49,6 @@ def find_receiver(vid: int = LOGITECH_VID) -> list[dict]:
 
     for info in all_devices:
         path = info["path"]
-        # bytes-path guard: hid.enumerate may return bytes on some platforms
         path_str = path.decode("utf-8", errors="replace") if isinstance(path, bytes) else repr(path)
         print(
             f"  PID=0x{info['product_id']:04X}  "
@@ -73,33 +68,21 @@ def open_receiver(info: dict):
     Open the HID interface described by `info` via open_path() and return the
     open hid.device object.
 
-    The caller owns the device lifetime — do NOT close here. This matches the
-    threat model: only open_path() after usage_page filter (T-02-03).
-
-    Raises OSError if open_path fails (propagates; do not swallow).
+    Caller owns the device lifetime. Raises OSError if open_path fails.
+    NEVER calls hid.open(vid, pid) — that risks opening the wrong interface.
     """
     device = hid.device()
-    device.open_path(info["path"])  # NEVER hid.open(vid, pid) — wrong interface risk
+    device.open_path(info["path"])
     return device
 
 
-def discover_device_index(device) -> int | None:
+def discover_device_index(device) -> int:
     """
-    Probe device indices 0x01–0x06 for a responsive wireless device.
+    Return the fixed receiver device index for G-series headset protocol.
 
-    Sends a Root feature (0x0000) query to each index; returns the first index
-    that returns a valid (non-error, non-timeout) response. Returns None if no
-    device is found. Device index 0xFF is never used here.
-
-    OSError per-index is caught and skipped (T-02-04: stale handle resilience).
-    HIDppError per-index is caught and skipped (offline/busy device at that index).
+    G Pro X Wireless uses device_idx=0xFF (the LIGHTSPEED receiver itself).
+    No per-device index probing via Root feature 0x0000 is needed.
+    Parameter 'device' accepted for API compatibility with query_battery.py
+    but is not used.
     """
-    for idx in range(DEVICE_INDEX_MIN, DEVICE_INDEX_MAX + 1):
-        msg = build_short_msg(device_idx=idx, feature_idx=0x00, function=0)
-        try:
-            result = send_and_recv(device, msg, timeout_ms=100)
-        except (HIDppError, OSError):
-            continue
-        if result is not None:
-            return idx
-    return None
+    return DEVICE_IDX

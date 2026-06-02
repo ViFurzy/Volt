@@ -1,56 +1,53 @@
-"""Unit tests for hidpp.receiver — device index discovery with mocked hid."""
+"""Unit tests for hidpp.receiver."""
 
-import pytest
-from unittest.mock import MagicMock, patch, call
-from hidpp.receiver import discover_device_index
-
-
-# ---------------------------------------------------------------------------
-# discover_device_index tests
-# ---------------------------------------------------------------------------
-
-def test_discover_returns_first_responding_index(mock_hid):
-    """Returns 0x01 when the first valid response comes from index 0x01."""
-    # A valid 20-byte response: report ID 0x10, device_idx 0x01, feature_idx 0x00
-    valid_response = [0x10, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00] + [0x00] * 13
-    # First read returns the valid response; subsequent reads return [] (timeout)
-    mock_hid.read.return_value = valid_response
-
-    result = discover_device_index(mock_hid)
-
-    assert result == 0x01
+from unittest.mock import MagicMock, patch
+from hidpp.receiver import find_receiver, open_receiver, discover_device_index, DEVICE_IDX
 
 
-def test_discover_skips_timeout_indices(mock_hid):
-    """Returns None when all indices time out (read returns [])."""
-    mock_hid.read.return_value = []
-
-    result = discover_device_index(mock_hid)
-
-    assert result is None
-
-
-def test_discover_skips_hidpp_error_indices(mock_hid):
-    """Skips index 0x01 (HIDppError) and returns 0x02 as the next valid index."""
-    # Error response at 0x01: response[2] == 0xFF triggers HIDppError(response[5])
-    error_response  = [0x10, 0x01, 0xFF, 0x00, 0x00, 0x05, 0x00] + [0x00] * 13
-    # Valid response at 0x02
-    valid_response  = [0x10, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00] + [0x00] * 13
-    mock_hid.read.side_effect = [error_response, valid_response]
-
-    result = discover_device_index(mock_hid)
-
-    assert result == 0x02
+def test_find_receiver_filters_ff43_only():
+    """find_receiver returns only usage_page=0xFF43 interfaces."""
+    with patch("hid.enumerate") as mock_enum:
+        mock_enum.return_value = [
+            {"usage_page": 0xFF00, "product_id": 0xC547, "path": b"/dev/hid0",
+             "usage": 0x01, "manufacturer_string": "", "product_string": ""},
+            {"usage_page": 0xFF43, "product_id": 0x0ABA, "path": b"/dev/hid1",
+             "usage": 0x01, "manufacturer_string": "", "product_string": ""},
+            {"usage_page": 0x000C, "product_id": 0x0ABA, "path": b"/dev/hid2",
+             "usage": 0x01, "manufacturer_string": "", "product_string": ""},
+        ]
+        result = find_receiver()
+    assert len(result) == 1
+    assert result[0]["usage_page"] == 0xFF43
 
 
-def test_discover_never_uses_0xFF(mock_hid):
-    """Verifies that 0xFF is never passed as device_idx in any write call."""
-    mock_hid.read.return_value = []
+def test_find_receiver_empty_when_no_ff43():
+    """find_receiver returns [] when no 0xFF43 interface is present."""
+    with patch("hid.enumerate") as mock_enum:
+        mock_enum.return_value = [
+            {"usage_page": 0xFF00, "product_id": 0xC547, "path": b"/dev/hid0",
+             "usage": 0x01, "manufacturer_string": "", "product_string": ""},
+        ]
+        result = find_receiver()
+    assert result == []
 
-    discover_device_index(mock_hid)
 
-    # build_short_msg puts device_idx at position [1] of the message list
-    # device.write() is called with that message as the single positional argument
-    for write_call in mock_hid.write.call_args_list:
-        msg = write_call[0][0]  # first positional arg
-        assert msg[1] != 0xFF, f"device_idx 0xFF found in write call: {msg}"
+def test_open_receiver_calls_open_path():
+    """open_receiver calls device.open_path with the info path."""
+    with patch("hid.device") as mock_dev_class:
+        mock_dev = MagicMock()
+        mock_dev_class.return_value = mock_dev
+        open_receiver({"path": b"/dev/hidraw0"})
+    mock_dev.open_path.assert_called_once_with(b"/dev/hidraw0")
+
+
+def test_device_idx_constant_is_0xff():
+    """DEVICE_IDX module constant is 0xFF."""
+    assert DEVICE_IDX == 0xFF
+
+
+def test_discover_device_index_returns_0xff():
+    """discover_device_index returns DEVICE_IDX (0xFF) without any HID I/O."""
+    mock_device = MagicMock()
+    result = discover_device_index(mock_device)
+    assert result == 0xFF
+    assert mock_device.write.call_count == 0
