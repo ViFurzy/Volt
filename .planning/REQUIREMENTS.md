@@ -7,15 +7,15 @@
 
 ### HID Communication
 
-- [ ] **HID-01**: App reads battery level from Logitech G Pro X Wireless via HID++ 2.0 over LIGHTSPEED USB dongle
+- [x] **HID-01**: App reads battery level from Logitech G Pro X Wireless via HID++ 2.0 over LIGHTSPEED USB dongle
 - [ ] **HID-02**: App reads battery level from SteelSeries Aerox 5 Wireless via 2.4GHz dongle (proprietary HID protocol)
 - [x] **HID-03**: App auto-discovers known devices when their USB dongle is plugged in (built-in VID/PID registry, no user config required)
 - [x] **HID-04**: App detects when a dongle is unplugged and marks affected device as offline
 
 ### Battery Display
 
-- [ ] **BATT-01**: App displays current battery percentage for each monitored device
-- [ ] **BATT-02**: App shows a charging indicator when a device is actively charging (if reported by device)
+- [x] **BATT-01**: App displays current battery percentage for each monitored device
+- [x] **BATT-02**: App shows a charging indicator when a device is actively charging (if reported by device)
 
 ### UI
 
@@ -67,12 +67,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HID-01 | Phase 2 | Pending |
+| HID-01 | Phase 2 | Complete |
 | HID-02 | Phase 5 | Pending |
 | HID-03 | Phase 3 | Complete |
 | HID-04 | Phase 3 | Complete |
-| BATT-01 | Phase 2 | Pending |
-| BATT-02 | Phase 2 | Pending |
+| BATT-01 | Phase 2 | Complete |
+| BATT-02 | Phase 2 | Complete |
 | UI-01 | Phase 4 | Pending |
 | UI-02 | Phase 4 | Pending |
 | UI-03 | Phase 4 | Pending |

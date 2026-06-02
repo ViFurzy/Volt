@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
+current_phase: 04
 current_plan: 1
-status: executing
-last_updated: "2026-06-02T16:38:20.179Z"
+status: ready
+last_updated: "2026-06-02T19:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 43
+  total_plans: 11
+  completed_plans: 11
+  percent: 46
 ---
 
 # State: PeriphWatcher
@@ -27,23 +27,20 @@ progress:
 
 ## Current Position
 
-**Current Phase:** 03
+**Current Phase:** 04
 **Current Plan:** 1
 **Status:** Ready to execute
 
 **Progress:**
 
 [██████████] 100%
-Phase: 03 (monitorservice-deviceregistry) — EXECUTING
-Plan: 2 of 4
-Phase: 03 (MonitorService + DeviceRegistry) — Not started
+Phase: 03 (monitorservice-deviceregistry) — COMPLETE
+Phase: 04 (qt-ui-window-tray) — Not started
         1  2  3  4  5  6  7
-              ^
+                 ^
 
-```
-
-**Phases complete:** 2/7
-**Plans complete:** 7 (across all phases)
+**Phases complete:** 3/7
+**Plans complete:** 11 (across all phases)
 
 ---
 
@@ -51,13 +48,14 @@ Phase: 03 (MonitorService + DeviceRegistry) — Not started
 
 | Metric | Value |
 |--------|-------|
-| Phases complete | 2/7 |
-| Requirements delivered | 3/12 (HID-01, BATT-01, BATT-02) |
-| Plans written | 6 |
-| Plans complete | 7 |
+| Phases complete | 3/7 |
+| Requirements delivered | 5/12 (HID-01, BATT-01, BATT-02, HID-03, HID-04) |
+| Plans written | 11 |
+| Plans complete | 11 |
 | Blockers outstanding | 0 |
 
 ---
+| Phase 03-monitorservice-deviceregistry P04 | 90 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -102,6 +100,14 @@ Phase: 03 (MonitorService + DeviceRegistry) — Not started
 - battery_probe_chain catches HIDppError (code 0x05) and returns None — device sends error when headset is off, not a timeout
 - Voltage-to-percent calibration hardcoded to 6-point curve [3500mV=0%, 3600mV=5%, 3700mV=30%, 3800mV=60%, 3900mV=90%, 4000mV=100%]
 
+### Decisions (from Phase 3)
+
+- MonitorApp does not own QApplication — entry point owns it for testability and Phase 4 handoff compatibility
+- SIGINT in Qt event loop requires 200ms heartbeat QTimer to yield to Python signal handler (otherwise Ctrl+C hangs)
+- discover() skips already-open HID handles to prevent false ONLINE+None spurious event on WM_DEVICECHANGE during unplug
+- stop() cancels _poll_task before stopping the asyncio loop to eliminate "Task was destroyed but it is pending!" warning
+- WM_DEVICECHANGE fast path: device marked OFFLINE immediately on unplug (not deferred to next 60s poll)
+
 ### Todos
 
 None
@@ -114,21 +120,25 @@ None
 
 ## Session Continuity
 
-**Last session:** 2026-06-02T16:38:20.172Z
-**Next action:** Plan Phase 3 (MonitorService + DeviceRegistry) via `/gsd:plan-phase 3`
+**Last session:** 2026-06-02T19:00:00.000Z
+**Next action:** Plan Phase 4 (Qt UI — Window + Tray) via `/gsd:plan-phase 4`
 
 ### Handoff Note
 
-Phase 2 is fully complete. All 4 plans executed and hardware-verified:
+Phase 3 is fully complete. All 4 plans executed and hardware-verified:
 
-- 02-01: Protocol layer + pytest bootstrap
-- 02-02: receiver.py (enumerate 0xFF43, open, discover index)
-- 02-03: features.py (BatteryResult, battery_probe_chain, voltage calibration)
-- 02-04: query_battery.py (integration entry point — hardware proof of life)
+- 03-01: DeviceState, DeviceStatus, KNOWN_DEVICES, thread-safe DeviceRegistry
+- 03-02: MonitorService asyncio polling engine (60s interval, discover, poll_once, rescan)
+- 03-03: HotPlugWatcher hidden QWidget + RegisterDeviceNotification + 500ms debounce
+- 03-04: MonitorApp wiring + run_monitor.py + integration test + hardware end-to-end verified
 
-Key finding: G Pro X Wireless uses G-series protocol (usage_page=0xFF43, feature 0x06/0x0D), not standard HID++ 2.0 Root discovery. Device index is fixed 0xFF. Headset-off sends HIDppError(0x05), not a timeout.
+Key findings from hardware checkpoint (03-04):
+- Plug triggers single ONLINE discovery within ~1s (WM_DEVICECHANGE + 500ms debounce works correctly)
+- Unplug marks device OFFLINE immediately via WM_DEVICECHANGE fast path
+- Ctrl+C exits cleanly (SIGINT + 200ms heartbeat QTimer pattern confirmed)
+- All 62 tests pass
 
-Phase 3 entry: consume find_receiver + battery_probe_chain from hidpp/ package in a 60s polling loop on asyncio background thread.
+Phase 4 entry: replace mock_consumer in run_monitor.py with real PySide6 main window consuming DeviceState snapshots from the same ui_queue. MonitorApp API is stable — Phase 4 adds window/tray shell only.
 
 ---
 *Created: 2026-06-01*
