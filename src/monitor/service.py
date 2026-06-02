@@ -124,12 +124,16 @@ class MonitorService:
                 # T-03-05: never open or register unknown devices
                 continue
             key = (vid, pid, DEVICE_IDX)
-            if key not in self._open:
-                try:
-                    handle = open_receiver(info)
-                except OSError:
-                    continue
-                self._open[key] = handle
+            if key in self._open:
+                # Handle already open — poll_once() owns state updates for live devices.
+                # Re-pushing ONLINE here clobbers real percent/CHARGING state and
+                # produces a false ONLINE+None% when WM_DEVICECHANGE fires during unplug.
+                continue
+            try:
+                handle = open_receiver(info)
+            except OSError:
+                continue
+            self._open[key] = handle
             device_name = KNOWN_DEVICES[(vid, pid)]
             state = DeviceState(
                 vid=vid,
