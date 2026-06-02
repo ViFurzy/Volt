@@ -51,3 +51,15 @@ def test_discover_device_index_returns_0xff():
     result = discover_device_index(mock_device)
     assert result == 0xFF
     assert mock_device.write.call_count == 0
+
+
+def test_find_receiver_silent_when_not_verbose(capsys):
+    """find_receiver(verbose=False) produces no stdout output (WR-03)."""
+    with patch("hid.enumerate") as mock_enum:
+        mock_enum.return_value = [
+            {"usage_page": 0xFF43, "product_id": 0x0ABA, "path": b"/dev/hid1",
+             "usage": 0x01, "manufacturer_string": "", "product_string": ""},
+        ]
+        find_receiver(verbose=False)
+    captured = capsys.readouterr()
+    assert captured.out == ""
