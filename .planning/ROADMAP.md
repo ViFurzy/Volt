@@ -61,7 +61,12 @@ Plans:
   3. Unplugging the dongle marks the affected device as OFFLINE in DeviceRegistry and pushes an update to the queue within the debounce window
   4. DeviceRegistry is a thread-safe store keyed by (vid, pid, dev_idx); all reads and writes from background thread and main thread are safe
   5. Queue.put() from background thread and QTimer drain on main thread function end-to-end: a mock consumer on the main thread receives DeviceState updates
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — src/monitor/state.py + registry.py: DeviceState, DeviceStatus, KNOWN_DEVICES, thread-safe DeviceRegistry (Wave 1)
+- [ ] 03-02-PLAN.md — src/monitor/service.py: MonitorService asyncio 60s poll loop, discover/poll_once, find_receiver verbose flag (Wave 2)
+- [ ] 03-03-PLAN.md — src/monitor/hotplug.py: HotPlugWatcher hidden QWidget, RegisterDeviceNotification, WM_DEVICECHANGE + 500ms debounce (Wave 3)
+- [ ] 03-04-PLAN.md — src/monitor/app.py + run_monitor.py: wire service+registry+hotplug, QTimer drain → mock consumer, hardware checkpoint (Wave 4)
 **UI hint**: yes
 
 ### Phase 4: Qt UI — Window + Tray
@@ -118,7 +123,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
 | 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
-| 3. MonitorService + DeviceRegistry | 0/? | Not started | - |
+| 3. MonitorService + DeviceRegistry | 0/4 | Planned | - |
 | 4. Qt UI — Window + Tray | 0/? | Not started | - |
 | 5. SteelSeries HID Backend | 0/? | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
@@ -140,4 +145,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
-*Last updated: 2026-06-01 — Phase 2 planned: 4 plans in 3 waves*
+*Last updated: 2026-06-02 — Phase 3 planned: 4 plans in 4 waves*
