@@ -35,7 +35,7 @@ def main() -> None:
     sigint_timer.start(200)
     sigint_timer.timeout.connect(lambda: None)  # wake Python every 200ms
 
-    app_obj = MonitorApp(consumer=window.on_device_update)
+    app_obj = MonitorApp(consumer=window.on_device_update, poll_interval=5.0)
     app_obj.start()
 
     # build_hotplug() MUST come after QApplication is created (winId requires it).
