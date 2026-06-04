@@ -3,7 +3,7 @@
 Pattern 1 from RESEARCH: icon + menu set BEFORE show() (Pitfall 3).
 DoubleClick on the tray icon restores the main window (D-07).
 """
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from ui.icon import make_volt_icon
@@ -48,6 +48,9 @@ class TrayManager:
         self._tray.show()
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        """Restore main window on DoubleClick (D-07, Research Pattern 1)."""
+        """Handle tray icon activation (D-07)."""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._window.show_restore()
+        elif reason == QSystemTrayIcon.ActivationReason.Context:
+            # setContextMenu() is unreliable on Windows — show manually at cursor.
+            self._menu.exec(QCursor.pos())
