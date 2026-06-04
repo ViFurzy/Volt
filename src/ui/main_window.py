@@ -1,8 +1,20 @@
-"""MainWindow — application shell for PeriphWatcher.
+"""MainWindow — VOLT | POWER CENTER application shell.
 
-Sidebar-driven QStackedWidget with 5 pages (D-03).
+Layout:
+    central widget
+      +-- QHBoxLayout
+            +-- SidebarNav (fixed width 210px)
+            +-- QStackedWidget (5 pages — D-03)
+                  +-- page 0: Dashboard  (device cards, side-by-side)
+                  +-- page 1: Devices    ("Coming soon")
+                  +-- page 2: History    ("Coming soon")
+                  +-- page 3: Profiles   ("Coming soon")
+                  +-- page 4: Settings
+
+dashboard_layout is a QHBoxLayout: cards insert left-to-right, stretch at end.
+Cards are limited to two per row; QScrollArea handles overflow.
+
 Close-to-tray: closeEvent hides instead of quitting (D-08, Research Pattern 2).
-on_device_update is a Wave-3 stub; Wave 3 (04-03) fills the device card logic.
 """
 from __future__ import annotations
 
@@ -29,55 +41,32 @@ if TYPE_CHECKING:
 
 
 class MainWindow(QMainWindow):
-    """Main application window.
-
-    Layout:
-        central widget
-          +-- QHBoxLayout
-                +-- SidebarNav (fixed width)
-                +-- QStackedWidget
-                      +-- page 0: DashboardPage  (Wave 3 fills device cards)
-                      +-- page 1: DevicesPage    ("Coming soon")
-                      +-- page 2: HistoryPage    ("Coming soon")
-                      +-- page 3: ProfilesPage   ("Coming soon")
-                      +-- page 4: SettingsPage
-    """
+    """Main application window for VOLT | POWER CENTER."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("PeriphWatcher")
-        self.resize(900, 600)
+        self.setWindowTitle("VOLT | POWER CENTER")
+        self.resize(960, 620)
 
-        # ---------------------------------------------------------------
-        # Build the QStackedWidget pages
-        # ---------------------------------------------------------------
+        # ── Stack pages ────────────────────────────────────────────
         self._stack = QStackedWidget()
 
-        # Page 0 — Dashboard (Wave 3 populates with DeviceCards)
-        self._dashboard_widget = QWidget()
-        self.dashboard_layout = QVBoxLayout(self._dashboard_widget)
-        self.dashboard_layout.setContentsMargins(16, 16, 16, 16)
-        self.dashboard_layout.setSpacing(12)
-        self.dashboard_layout.addStretch()
-        dashboard_scroll = QScrollArea()
-        dashboard_scroll.setWidgetResizable(True)
-        dashboard_scroll.setWidget(self._dashboard_widget)
-        self._stack.addWidget(dashboard_scroll)  # index 0
+        # Page 0 — Dashboard
+        dashboard_page, self.dashboard_layout, self._count_label = self._build_dashboard()
+        self._stack.addWidget(dashboard_page)   # index 0
 
-        # Pages 1-3 — Coming soon placeholders
-        for label in ("Devices", "History", "Profiles"):
-            page = _PlaceholderPage(label)
-            self._stack.addWidget(page)            # indices 1, 2, 3
+        # Pages 1-3 — Placeholders
+        for name in ("Devices", "History", "Profiles"):
+            self._stack.addWidget(_PlaceholderPage(name))  # indices 1, 2, 3
 
         # Page 4 — Settings
         self._settings_page = SettingsPage()
-        self._stack.addWidget(self._settings_page)  # index 4
+        self._stack.addWidget(self._settings_page)          # index 4
 
-        # ---------------------------------------------------------------
-        # Sidebar + main area layout
-        # ---------------------------------------------------------------
+        # ── Sidebar ────────────────────────────────────────────────
         self._sidebar = SidebarNav(self._stack)
 
+        # ── Central layout ─────────────────────────────────────────
         central = QWidget()
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -86,57 +75,79 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._stack)
         self.setCentralWidget(central)
 
-        # Wave 3: device card lookup dict keyed by (vid, pid, dev_idx)
-        self._cards: dict[tuple[int, int, int], object] = {}
+        # Device card registry keyed by (vid, pid, dev_idx)
+        self._cards: dict[tuple[int, int, int], DeviceCard] = {}
 
-    # ------------------------------------------------------------------
-    # close-to-tray (D-08, Research Pattern 2)
-    # ------------------------------------------------------------------
+    # ── Dashboard builder ──────────────────────────────────────────
+
+    def _build_dashboard(
+        self,
+    ) -> tuple[QWidget, QHBoxLayout, QLabel]:
+        """Return (scroll-wrapped page, card row layout, count label)."""
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(24, 20, 24, 20)
+        outer.setSpacing(16)
+
+        # "All Devices (N)" heading
+        count_label = QLabel("All Devices (0)")
+        count_label.setObjectName("dashboardHeader")
+        count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        outer.addWidget(count_label)
+
+        # Card row — QHBoxLayout with trailing stretch
+        cards_row = QWidget()
+        cards_layout = QHBoxLayout(cards_row)
+        cards_layout.setContentsMargins(0, 0, 0, 0)
+        cards_layout.setSpacing(16)
+        cards_layout.addStretch()   # trailing stretch (tests assert last item has no widget)
+        outer.addWidget(cards_row)
+        outer.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(container)
+
+        return scroll, cards_layout, count_label
+
+    # ── Close-to-tray ──────────────────────────────────────────────
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Hide the window instead of closing it.
-
-        event.ignore() suppresses Qt's default close/destroy behaviour.
-        QApplication.setQuitOnLastWindowClosed(False) (set in __main__)
-        ensures the process does not exit when the window is hidden.
-        """
         event.ignore()
         self.hide()
 
     def show_restore(self) -> None:
-        """Restore window from tray: show, bring to front, activate."""
+        """Restore window from tray."""
         self.show()
         self.raise_()
         self.activateWindow()
 
-    # ------------------------------------------------------------------
-    # Consumer hook (Wave 3 stub)
-    # ------------------------------------------------------------------
+    # ── Device update consumer ─────────────────────────────────────
 
     def on_device_update(self, state: DeviceState) -> None:
         """Create or update the DeviceCard for the given DeviceState.
 
-        Called by the main-thread QTimer drain when a DeviceState arrives
-        from the background asyncio thread via queue.Queue (architecture
-        invariant: all Qt widget mutation on main thread only).
-
         First call for a (vid, pid, dev_idx) key creates a DeviceCard and
         inserts it into dashboard_layout before the trailing stretch.
-        Subsequent calls update the existing card in place — no duplicates.
+        Subsequent calls update the existing card in place.
         """
         key = (state.vid, state.pid, state.dev_idx)
         if key not in self._cards:
             card = DeviceCard(state)
             self._cards[key] = card
-            # Insert before the trailing stretch item so cards stack top-down
+            # Insert before trailing stretch
             stretch_idx = self.dashboard_layout.count() - 1
             self.dashboard_layout.insertWidget(stretch_idx, card)
+            # Register in sidebar Devices sub-items
+            self._sidebar.register_device(key, state.device_name)
+            # Update header count
+            self._count_label.setText(f"All Devices ({len(self._cards)})")
         else:
             self._cards[key].update_state(state)
 
 
 class _PlaceholderPage(QWidget):
-    """Simple 'Coming soon' page for sidebar items not active in Phase 4."""
+    """Simple placeholder for sidebar sections not yet implemented."""
 
     def __init__(self, section_name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -144,5 +155,5 @@ class _PlaceholderPage(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl = QLabel(f"{section_name} — Coming soon")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("font-size: 16px; color: #888888;")
+        lbl.setStyleSheet("font-size: 16px; color: #555566;")
         layout.addWidget(lbl)

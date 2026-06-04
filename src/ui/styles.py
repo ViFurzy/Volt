@@ -1,114 +1,155 @@
-"""Global QSS dark stylesheet for PeriphWatcher.
+"""Global QSS stylesheet — VOLT | POWER CENTER dark theme.
 
-VOLT | POWER CENTER dark theme tokens:
-  background:  #202535
-  elevated:    #262355
-  text:        #FFFFFF
-  accent:      #4FC3F7  (teal highlight for active sidebar item)
-  hover:       #2a2d45
-  scrollbar:   #3a3d55
+Color tokens:
+  root bg:      #1a1a1f
+  surface:      #202026  (sidebar, cards)
+  elevated:     #282366  (active nav, panels)
+  accent blue:  #7B9FFF  (active nav text, Volt title, left bar)
+  accent amber: #E89000  (primary buttons, toggle on)
+  batt warn:    #F0BB66  (≤45%)
+  batt crit:    #EE6800  (≤8%)
+  text primary: #FFFFFF
+  text muted:   #888899
 """
 
 DARK_QSS: str = """
-QWidget {
-    background-color: #202535;
+QMainWindow, QWidget {
+    background-color: #1a1a1f;
     color: #FFFFFF;
+    font-family: "Segoe UI", "Inter", sans-serif;
 }
-QMainWindow {
-    background-color: #202535;
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+#sidebar {
+    background-color: #202026;
+    border-right: 1px solid #25252f;
 }
-QPushButton {
+#sidebarHeader {
+    background-color: #202026;
+}
+#voltTitle {
+    color: #7B9FFF;
+    font-size: 22px;
+    font-weight: bold;
     background-color: transparent;
-    color: #FFFFFF;
+}
+#voltSubtitle {
+    color: #888899;
+    font-size: 9px;
+    letter-spacing: 3px;
+    background-color: transparent;
+}
+QPushButton#navButton {
+    background-color: transparent;
+    color: #AAAACC;
     border: none;
-    padding: 10px 14px;
+    border-left: 3px solid transparent;
+    padding: 10px 16px;
     text-align: left;
     font-size: 13px;
+    border-radius: 0px;
 }
-QPushButton:checked {
-    background-color: #262355;
-    border-left: 3px solid #4FC3F7;
+QPushButton#navButton:checked {
+    background-color: #282366;
+    color: #7B9FFF;
+    border-left: 3px solid #7B9FFF;
+    font-weight: bold;
 }
-QPushButton:hover:!checked {
-    background-color: #2a2d45;
+QPushButton#navButton:hover:!checked {
+    background-color: #25253a;
+    color: #DDDDFF;
 }
+QPushButton#deviceSubItem {
+    background-color: transparent;
+    color: #888899;
+    border: none;
+    border-left: 3px solid transparent;
+    padding: 5px 16px 5px 40px;
+    text-align: left;
+    font-size: 12px;
+    border-radius: 0px;
+}
+QPushButton#deviceSubItem:hover {
+    color: #AAAACC;
+    background-color: #22222e;
+}
+#sidebarSep {
+    background-color: #25252f;
+    max-height: 1px;
+    border: none;
+}
+
+/* ── Dashboard ───────────────────────────────────────────── */
+#dashboardHeader {
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: bold;
+    background-color: transparent;
+    padding: 4px 0;
+}
+
+/* ── Device card ─────────────────────────────────────────── */
+QFrame#deviceCard {
+    background-color: #202026;
+    border-radius: 14px;
+    border: 1px solid #2a2a38;
+}
+QFrame#deviceCard[offline="true"] {
+    border-color: #202026;
+}
+
+/* ── Scroll bars ─────────────────────────────────────────── */
 QScrollBar:vertical {
-    background-color: #202535;
-    width: 8px;
+    background-color: #1a1a1f;
+    width: 6px;
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background-color: #3a3d55;
-    border-radius: 4px;
+    background-color: #3a3a55;
+    border-radius: 3px;
     min-height: 20px;
 }
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical {
-    height: 0;
-}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar:horizontal {
-    background-color: #202535;
-    height: 8px;
+    background-color: #1a1a1f;
+    height: 6px;
     margin: 0;
 }
 QScrollBar::handle:horizontal {
-    background-color: #3a3d55;
-    border-radius: 4px;
+    background-color: #3a3a55;
+    border-radius: 3px;
     min-width: 20px;
 }
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal {
-    width: 0;
-}
-QLabel {
-    background-color: transparent;
-    color: #FFFFFF;
-}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollArea { border: none; background-color: transparent; }
+
+/* ── Generic widgets ─────────────────────────────────────── */
+QLabel { background-color: transparent; color: #FFFFFF; }
+
 QCheckBox {
-    color: #FFFFFF;
+    color: #AAAACC;
     spacing: 8px;
     font-size: 13px;
 }
 QCheckBox::indicator {
     width: 16px;
     height: 16px;
-    border: 1px solid #3a3d55;
+    border: 1px solid #3a3a55;
     border-radius: 3px;
-    background-color: #202535;
+    background-color: #202026;
 }
 QCheckBox::indicator:checked {
-    background-color: #4FC3F7;
-    border-color: #4FC3F7;
+    background-color: #E89000;
+    border-color: #E89000;
 }
+
 QMenu {
-    background-color: #262355;
+    background-color: #202026;
     color: #FFFFFF;
-    border: 1px solid #3a3d55;
+    border: 1px solid #2a2a38;
     padding: 4px 0;
 }
-QMenu::item {
-    padding: 6px 20px;
-}
-QMenu::item:selected {
-    background-color: #2a2d45;
-}
-QMenu::separator {
-    height: 1px;
-    background-color: #3a3d55;
-    margin: 4px 0;
-}
-QScrollArea {
-    border: none;
-    background-color: #202535;
-}
-QFrame#deviceCard {
-    background-color: #262355;
-    border-radius: 8px;
-    border: 1px solid #3a3d55;
-}
-QFrame#deviceCard[offline="true"] {
-    background-color: #1e2030;
-    border-color: #2a2d45;
-    /* opacity is not a valid QSS property — dimming applied via QGraphicsOpacityEffect in device_card.py */
-}
+QMenu::item { padding: 6px 20px; }
+QMenu::item:selected { background-color: #282366; }
+QMenu::separator { height: 1px; background-color: #2a2a38; margin: 4px 0; }
 """
