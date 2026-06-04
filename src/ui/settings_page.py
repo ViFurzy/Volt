@@ -17,14 +17,13 @@ from ui.settings_manager import is_startup_enabled, load_config, save_config, se
 
 
 class SettingsPage(QWidget):
-    """Settings tab content: heading + startup toggle.
+    """Settings tab content: heading + toggles.
 
-    The checkbox initial state is derived from is_startup_enabled() (registry source
-    of truth).  While loading the initial state, signals are blocked so the toggled
-    handler does not fire spuriously on construction.
+    Checkboxes:
+      - Launch at startup  (registry + config)
+      - Minimize to tray on close  (config close_behavior)
 
-    toggled handler keeps both the registry (set_startup) and the JSON file
-    (save_config) in sync so SYS-01 and SYS-02 stay consistent.
+    Signals are blocked during construction so handlers don't fire spuriously.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -38,25 +37,37 @@ class SettingsPage(QWidget):
         heading.setStyleSheet("font-size: 20px; font-weight: bold;")
         layout.addWidget(heading)
 
+        # ── Launch at startup ──────────────────────────────────────
         self._startup_cb = QCheckBox("Launch at startup")
         layout.addWidget(self._startup_cb)
-        layout.addStretch()
 
-        # ------------------------------------------------------------------
-        # Set initial state from the registry without triggering the handler.
-        # ------------------------------------------------------------------
         self._startup_cb.blockSignals(True)
         self._startup_cb.setChecked(is_startup_enabled())
         self._startup_cb.blockSignals(False)
-
-        # Wire toggle -> registry + config in sync
         self._startup_cb.toggled.connect(self._on_startup_toggled)
 
+        # ── Close behaviour ────────────────────────────────────────
+        self._tray_close_cb = QCheckBox("Minimize to tray on close (don't ask)")
+        layout.addWidget(self._tray_close_cb)
+
+        cfg = load_config()
+        self._tray_close_cb.blockSignals(True)
+        self._tray_close_cb.setChecked(cfg.get("close_behavior") == "tray")
+        self._tray_close_cb.blockSignals(False)
+        self._tray_close_cb.toggled.connect(self._on_tray_close_toggled)
+
+        layout.addStretch()
+
     def _on_startup_toggled(self, checked: bool) -> None:
-        """Keep HKCU Run key and JSON config in sync when the user flips the toggle."""
         set_startup(checked)
         cfg = load_config()
         cfg["launch_at_startup"] = checked
+        save_config(cfg)
+
+    def _on_tray_close_toggled(self, checked: bool) -> None:
+        """Save close_behavior: 'tray' when checked, None (ask) when unchecked."""
+        cfg = load_config()
+        cfg["close_behavior"] = "tray" if checked else None
         save_config(cfg)
 
     # ------------------------------------------------------------------
