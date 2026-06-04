@@ -24,11 +24,12 @@ from hidpp.receiver import (
     find_receiver,
     open_receiver,
 )
-from hidpp.features import battery_probe_chain, voltage_to_percent
+from hidpp.features import voltage_to_percent
+from steelseries.driver import SS_DEVICE_IDX, find_dongle, open_dongle, ss_battery_probe
 
 _VOLTAGE_WINDOW = 4  # readings to average (~4 min at 60s poll)
 from monitor.registry import DeviceRegistry
-from monitor.state import KNOWN_DEVICES, DeviceState, DeviceStatus
+from monitor.state import KNOWN_DEVICES, DEVICE_PROBES, DeviceState, DeviceStatus
 
 
 class MonitorService:
@@ -138,16 +139,26 @@ class MonitorService:
         both plug AND unplug events, it serves as the fast unplug detector: any handle in
         self._open whose device is no longer enumerable is closed and marked OFFLINE here,
         without waiting for the next poll_once() cycle.
+
+        Logitech: persistent open handle stored in self._open.
+        SteelSeries: info dict stored in self._open (no persistent handle — dongle responds
+        exactly once per device open, so poll_once() opens fresh per poll).
         """
-        interfaces = find_receiver(verbose=False)
+        logitech_interfaces = find_receiver(verbose=False)
+        ss_interfaces = find_dongle(verbose=False)
 
         # Build the set of currently-enumerable known-device keys.
         found_keys: set[tuple[int, int, int]] = set()
-        for info in interfaces:
+        for info in logitech_interfaces:
             vid = info["vendor_id"]
             pid = info["product_id"]
             if (vid, pid) in KNOWN_DEVICES:
                 found_keys.add((vid, pid, DEVICE_IDX))
+        for info in ss_interfaces:
+            vid = info["vendor_id"]
+            pid = info["product_id"]
+            if (vid, pid) in KNOWN_DEVICES:
+                found_keys.add((vid, pid, SS_DEVICE_IDX))
 
         # Mark any open handle that disappeared as OFFLINE immediately (HID-04 fast path).
         for key in list(self._open.keys()):
@@ -157,13 +168,15 @@ class MonitorService:
                     self._ui_queue.put(offline_state)
                 try:
                     self._open[key].close()
+                except AttributeError:
+                    pass  # SteelSeries: _open[key] is a dict, not a handle
                 except Exception:
                     pass
                 del self._open[key]
                 self._voltage_history.pop(key, None)
 
-        # Open handles for newly-appeared known devices.
-        for info in interfaces:
+        # Open handles for newly-appeared Logitech devices.
+        for info in logitech_interfaces:
             vid = info["vendor_id"]
             pid = info["product_id"]
             if (vid, pid) not in KNOWN_DEVICES:
@@ -181,6 +194,29 @@ class MonitorService:
                 vid=vid,
                 pid=pid,
                 dev_idx=DEVICE_IDX,
+                device_name=device_name,
+                percent=None,
+                charging=False,
+                status=DeviceStatus.ONLINE,
+            )
+            self._registry.upsert(state)
+            self._ui_queue.put(state)
+
+        # Store info dicts for newly-appeared SteelSeries devices (no persistent handle).
+        for info in ss_interfaces:
+            vid = info["vendor_id"]
+            pid = info["product_id"]
+            if (vid, pid) not in KNOWN_DEVICES:
+                continue
+            key = (vid, pid, SS_DEVICE_IDX)
+            if key in self._open:
+                continue  # already tracked; poll_once() owns live state
+            self._open[key] = info  # info dict, not an open handle
+            device_name = KNOWN_DEVICES[(vid, pid)]
+            state = DeviceState(
+                vid=vid,
+                pid=pid,
+                dev_idx=SS_DEVICE_IDX,
                 device_name=device_name,
                 percent=None,
                 charging=False,
@@ -207,7 +243,26 @@ class MonitorService:
         """
         for key, handle in list(self._open.items()):
             vid, pid, dev_idx = key
-            result = battery_probe_chain(handle, dev_idx)
+            probe_fn = DEVICE_PROBES.get((vid, pid))
+            if probe_fn is None:
+                continue
+            if probe_fn is ss_battery_probe:
+                # SteelSeries: open fresh handle per poll (dongle responds once per open).
+                # handle is the info dict stored by discover().
+                fresh_handle = None
+                try:
+                    fresh_handle = open_dongle(handle)
+                    result = probe_fn(fresh_handle, dev_idx)
+                except OSError:
+                    result = None
+                finally:
+                    if fresh_handle is not None:
+                        try:
+                            fresh_handle.close()
+                        except Exception:
+                            pass
+            else:
+                result = probe_fn(handle, dev_idx)
             if result is None or result.percent == 0:
                 # Headset off, transitioning, or zero-voltage transient — mark
                 # OFFLINE but keep handle so recovery is automatic on next poll.
@@ -215,11 +270,15 @@ class MonitorService:
                 if offline_state is not None:
                     self._ui_queue.put(offline_state)
             else:
-                # Smooth raw voltage over the last _VOLTAGE_WINDOW readings to
-                # eliminate ADC jitter that causes ±1% flicker.
-                hist = self._voltage_history.setdefault(key, deque(maxlen=_VOLTAGE_WINDOW))
-                hist.append(result.voltage_mv)
-                smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
+                if result.voltage_mv != 0:
+                    # Smooth raw voltage over the last _VOLTAGE_WINDOW readings to
+                    # eliminate ADC jitter that causes ±1% flicker.
+                    hist = self._voltage_history.setdefault(key, deque(maxlen=_VOLTAGE_WINDOW))
+                    hist.append(result.voltage_mv)
+                    smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
+                else:
+                    # SteelSeries reports voltage_mv=0; use percent directly, no smoothing.
+                    smoothed_percent = result.percent
                 # D-03: charging=True → CHARGING; else → ONLINE
                 status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
                 # During CHARGING, hide the voltage-elevated % (charger current

@@ -9,6 +9,9 @@ hardcoded Python dict until multi-user customisation is required (deferred).
 import enum
 from dataclasses import dataclass
 
+from hidpp.features import battery_probe_chain
+from steelseries.driver import ss_battery_probe
+
 
 class DeviceStatus(enum.Enum):
     """Three-state device status (D-03).
@@ -45,7 +48,16 @@ class DeviceState:
 # Hardcoded VID/PID → human-readable name registry (D-04, D-05).
 # device_name in DeviceState always comes from this lookup — never from
 # hid.enumerate()'s product_string (which can change across firmware updates).
-# Phase 5 adds the SteelSeries Aerox 5 Wireless by appending an entry here.
 KNOWN_DEVICES: dict[tuple[int, int], str] = {
     (0x046D, 0x0ABA): "G Pro X Wireless",
+    (0x1038, 0x1852): "Aerox 5 Wireless",
+}
+
+# Probe function registry: (vid, pid) → (device_or_info, dev_idx) → BatteryResult | None.
+# For Logitech, the first argument is an open hid.device handle.
+# For SteelSeries, the first argument is the info dict (open_dongle is called
+# per-poll inside poll_once — the dongle responds exactly once per device open).
+DEVICE_PROBES: dict[tuple[int, int], callable] = {
+    (0x046D, 0x0ABA): battery_probe_chain,
+    (0x1038, 0x1852): ss_battery_probe,
 }
