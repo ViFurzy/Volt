@@ -13,7 +13,7 @@
 - [x] **Phase 3: MonitorService + DeviceRegistry** - Asyncio background thread, 60s polling loop, hot-plug detection, queue-based updates (completed 2026-06-02)
 - [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
-- [ ] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic
+- [x] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic *(complete 2026-06-04)*
 - [ ] **Phase 7: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
 
 ---
@@ -167,9 +167,9 @@ Plans:
 **Plans**: 3 plans
 Plans:
 
-- [ ] 06-01-PLAN.md — NotificationManager class + 7 unit tests (TDD, Wave 1)
-- [ ] 06-02-PLAN.md — Install windows-toasts, extend settings_manager defaults, wire into __main__.py (Wave 2)
-- [ ] 06-03-PLAN.md — Hardware checkpoint: toast in Action Center, cooldown verification (Wave 3, autonomous: false)
+- [x] 06-01-PLAN.md — NotificationManager class + 7 unit tests (TDD, Wave 1)
+- [x] 06-02-PLAN.md — Install windows-toasts, extend settings_manager defaults, wire into __main__.py (Wave 2)
+- [x] 06-03-PLAN.md — Hardware checkpoint: toast in Action Center, cooldown verification (Wave 3, autonomous: false)
 
 ### Phase 7: Packaging + Distribution
 
@@ -196,7 +196,7 @@ Plans:
 | 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
 | 4. Qt UI — Window + Tray | 4/4 | Complete   | 2026-06-02 |
 | 5. SteelSeries HID Backend | 0/3 | Not started | - |
-| 6. Notifications | 0/? | Not started | - |
+| 6. Notifications | 3/3 | Complete | 2026-06-04 |
 | 7. Packaging + Distribution | 0/? | Not started | - |
 
 ---
