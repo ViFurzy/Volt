@@ -17,13 +17,16 @@ import asyncio
 import concurrent.futures
 import queue
 import threading
+from collections import deque
 
 from hidpp.receiver import (
     DEVICE_IDX,
     find_receiver,
     open_receiver,
 )
-from hidpp.features import battery_probe_chain
+from hidpp.features import battery_probe_chain, voltage_to_percent
+
+_VOLTAGE_WINDOW = 4  # readings to average (~4 min at 60s poll)
 from monitor.registry import DeviceRegistry
 from monitor.state import KNOWN_DEVICES, DeviceState, DeviceStatus
 
@@ -59,6 +62,8 @@ class MonitorService:
         # Open HID device handles keyed by (vid, pid, dev_idx).
         # Accessed exclusively on the bg asyncio thread.
         self._open: dict[tuple[int, int, int], object] = {}
+        # Rolling voltage history for smoothing (keyed same as _open).
+        self._voltage_history: dict[tuple[int, int, int], deque] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -155,6 +160,7 @@ class MonitorService:
                 except Exception:
                     pass
                 del self._open[key]
+                self._voltage_history.pop(key, None)
 
         # Open handles for newly-appeared known devices.
         for info in interfaces:
@@ -209,12 +215,17 @@ class MonitorService:
                 if offline_state is not None:
                     self._ui_queue.put(offline_state)
             else:
+                # Smooth raw voltage over the last _VOLTAGE_WINDOW readings to
+                # eliminate ADC jitter that causes ±1% flicker.
+                hist = self._voltage_history.setdefault(key, deque(maxlen=_VOLTAGE_WINDOW))
+                hist.append(result.voltage_mv)
+                smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
                 # D-03: charging=True → CHARGING; else → ONLINE
                 status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
                 # During CHARGING, hide the voltage-elevated % (charger current
                 # inflates voltage to ~4.2 V regardless of actual charge state).
                 # Show None so the UI renders "CHARGING" without a misleading %.
-                percent = None if result.charging else result.percent
+                percent = None if result.charging else smoothed_percent
                 device_name = KNOWN_DEVICES.get((vid, pid), "Unknown")
                 state = DeviceState(
                     vid=vid,

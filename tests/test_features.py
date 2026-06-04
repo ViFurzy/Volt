@@ -54,6 +54,7 @@ def test_parses_voltage_bytes(mock_hid):
     # [0x11, 0xFF, 0x06, 0x0D, 0x0D, 0xF4, 0x01, ...] → 3572 mV, discharging
     mock_hid.read.return_value = [0x11, 0xFF, 0x06, 0x0D, 0x0D, 0xF4, 0x01] + [0x00] * 13
     result = battery_probe_chain(mock_hid, 0xFF)
+    assert result.voltage_mv == 3572
     assert result.percent == voltage_to_percent(3572)
     assert result.charging is False
     assert result.feature_used == "0x06/0x0D"

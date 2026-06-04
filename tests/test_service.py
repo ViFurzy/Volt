@@ -167,7 +167,7 @@ class TestPollOnce:
 
         mocker.patch(
             "monitor.service.battery_probe_chain",
-            return_value=BatteryResult(percent=75, charging=False, feature_used="0x06/0x0D"),
+            return_value=BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D"),
         )
 
         asyncio.run(service.poll_once())
@@ -187,7 +187,7 @@ class TestPollOnce:
 
         mocker.patch(
             "monitor.service.battery_probe_chain",
-            return_value=BatteryResult(percent=60, charging=True, feature_used="0x06/0x0D"),
+            return_value=BatteryResult(percent=60, voltage_mv=3894, charging=True, feature_used="0x06/0x0D"),
         )
 
         asyncio.run(service.poll_once())

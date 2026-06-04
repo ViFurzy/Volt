@@ -17,6 +17,7 @@ _CALIB = [(3320, 0), (3670, 5), (3740, 20), (3780, 30), (3830, 50), (4150, 100)]
 @dataclass
 class BatteryResult:
     percent: int
+    voltage_mv: int
     charging: bool
     feature_used: str
 
@@ -53,6 +54,7 @@ def battery_probe_chain(device, device_idx: int) -> "BatteryResult | None":
     charging = result[6] == 0x03
     return BatteryResult(
         percent=voltage_to_percent(voltage_mv),
+        voltage_mv=voltage_mv,
         charging=charging,
         feature_used="0x06/0x0D",
     )
