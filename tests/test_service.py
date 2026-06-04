@@ -1,8 +1,8 @@
 """Unit tests for monitor.service.MonitorService.
 
 All tests exercise discover() and poll_once() directly via asyncio.run() —
-no real hardware, no real threads. find_receiver, open_receiver, and
-battery_probe_chain are patched at the monitor.service module namespace.
+no real hardware, no real threads. find_receiver, open_receiver, find_dongle,
+and DEVICE_PROBES are patched at the monitor.service module namespace.
 """
 
 import asyncio
@@ -15,6 +15,8 @@ from hidpp.features import BatteryResult
 from monitor.registry import DeviceRegistry
 from monitor.service import MonitorService
 from monitor.state import DeviceStatus, KNOWN_DEVICES
+from steelseries.driver import SS_DEVICE_IDX
+from steelseries.driver import ss_battery_probe as _ss_battery_probe
 
 
 # ---------------------------------------------------------------------------
@@ -24,6 +26,17 @@ from monitor.state import DeviceStatus, KNOWN_DEVICES
 GPRO_VID = 0x046D
 GPRO_PID = 0x0ABA
 GPRO_KEY = (GPRO_VID, GPRO_PID, DEVICE_IDX)
+
+SS_VID = 0x1038
+SS_PID = 0x1852
+SS_KEY = (SS_VID, SS_PID, SS_DEVICE_IDX)
+SS_INTERFACE = {
+    "vendor_id": SS_VID,
+    "product_id": SS_PID,
+    "interface_number": 3,
+    "usage_page": 0xFFC0,
+    "path": b"/dev/hid3",
+}
 
 GPRO_INTERFACE = {
     "vendor_id": GPRO_VID,
@@ -64,6 +77,7 @@ class TestDiscover:
 
         mock_handle = mocker.MagicMock()
         mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
         mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
 
         asyncio.run(service.discover())
@@ -84,6 +98,7 @@ class TestDiscover:
 
         mock_handle = mocker.MagicMock()
         mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
         mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
 
         asyncio.run(service.discover())
@@ -100,6 +115,7 @@ class TestDiscover:
         service = make_service(ui_queue, registry)
 
         mocker.patch("monitor.service.find_receiver", return_value=[UNKNOWN_INTERFACE])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
         mock_open = mocker.patch("monitor.service.open_receiver")
 
         asyncio.run(service.discover())
@@ -115,6 +131,7 @@ class TestDiscover:
 
         mock_handle = mocker.MagicMock()
         mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
         mock_open = mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
 
         asyncio.run(service.discover())  # first call opens
@@ -129,12 +146,57 @@ class TestDiscover:
         service = make_service(ui_queue, registry)
 
         mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
         mocker.patch("monitor.service.open_receiver", side_effect=OSError("access denied"))
 
         asyncio.run(service.discover())
 
         assert registry.all() == []
         assert ui_queue.empty()
+
+    def test_ss_dongle_unplug_marks_offline(self, mocker):
+        """discover() with SS dongle gone marks SS key OFFLINE and removes from _open."""
+        ui_queue = queue.Queue()
+        registry = DeviceRegistry()
+        service = make_service(ui_queue, registry)
+
+        # Pre-populate as if SS was already discovered
+        service._open[SS_KEY] = SS_INTERFACE
+        from monitor.state import DeviceState
+        registry.upsert(DeviceState(
+            vid=SS_VID, pid=SS_PID, dev_idx=SS_DEVICE_IDX,
+            device_name="Aerox 5 Wireless", percent=50,
+            charging=False, status=DeviceStatus.ONLINE,
+        ))
+        # Drain initial queue entry
+        try:
+            while not ui_queue.empty():
+                ui_queue.get_nowait()
+        except Exception:
+            pass
+
+        # Both Logitech and SteelSeries gone
+        mocker.patch("monitor.service.find_receiver", return_value=[])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
+
+        asyncio.run(service.discover())
+
+        assert SS_KEY not in service._open
+        assert registry.get(SS_KEY).status == DeviceStatus.OFFLINE
+
+    def test_ss_discover_stores_info_dict(self, mocker):
+        """discover() with SS interface stores info dict (not handle) in self._open."""
+        ui_queue = queue.Queue()
+        registry = DeviceRegistry()
+        service = make_service(ui_queue, registry)
+
+        mocker.patch("monitor.service.find_receiver", return_value=[])
+        mocker.patch("monitor.service.find_dongle", return_value=[SS_INTERFACE])
+
+        asyncio.run(service.discover())
+
+        assert SS_KEY in service._open
+        assert isinstance(service._open[SS_KEY], dict)
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +227,9 @@ class TestPollOnce:
         """poll_once() with BatteryResult(75, False) upserts ONLINE, percent=75."""
         service, _, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch(
-            "monitor.service.battery_probe_chain",
-            return_value=BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D"),
+        mocker.patch.dict(
+            "monitor.service.DEVICE_PROBES",
+            {(GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D")},
         )
 
         asyncio.run(service.poll_once())
@@ -185,9 +247,9 @@ class TestPollOnce:
         """poll_once() with BatteryResult(charging=True) yields status=CHARGING."""
         service, _, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch(
-            "monitor.service.battery_probe_chain",
-            return_value=BatteryResult(percent=60, voltage_mv=3894, charging=True, feature_used="0x06/0x0D"),
+        mocker.patch.dict(
+            "monitor.service.DEVICE_PROBES",
+            {(GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(percent=60, voltage_mv=3894, charging=True, feature_used="0x06/0x0D")},
         )
 
         asyncio.run(service.poll_once())
@@ -199,7 +261,7 @@ class TestPollOnce:
         assert queued.status == DeviceStatus.CHARGING
 
     def test_none_result_marks_offline_keeps_handle(self, mocker):
-        """poll_once() with battery_probe_chain=None marks OFFLINE but keeps handle open.
+        """poll_once() with probe returning None marks OFFLINE but keeps handle open.
 
         The handle is kept so the next poll cycle can detect recovery when the
         headset turns back on without the dongle being replugged. Handles are
@@ -207,7 +269,10 @@ class TestPollOnce:
         """
         service, mock_handle, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch("monitor.service.battery_probe_chain", return_value=None)
+        mocker.patch.dict(
+            "monitor.service.DEVICE_PROBES",
+            {(GPRO_VID, GPRO_PID): lambda h, i: None},
+        )
 
         asyncio.run(service.poll_once())
 
@@ -231,7 +296,10 @@ class TestPollOnce:
         mock_handle = mocker.MagicMock()
         service._open[GPRO_KEY] = mock_handle  # open but NOT in registry
 
-        mocker.patch("monitor.service.battery_probe_chain", return_value=None)
+        mocker.patch.dict(
+            "monitor.service.DEVICE_PROBES",
+            {(GPRO_VID, GPRO_PID): lambda h, i: None},
+        )
 
         asyncio.run(service.poll_once())
 
@@ -239,6 +307,55 @@ class TestPollOnce:
         assert GPRO_KEY in service._open
         # Queue empty (mark_offline returned None → no put)
         assert ui_queue.empty()
+
+    def test_dispatches_via_device_probes(self, mocker):
+        """poll_once() calls the probe_fn from DEVICE_PROBES, not battery_probe_chain."""
+        service, mock_handle, _, _ = self._setup_with_open_device(mocker)
+
+        mock_probe = mocker.MagicMock(
+            return_value=BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D")
+        )
+        mocker.patch.dict("monitor.service.DEVICE_PROBES", {(GPRO_VID, GPRO_PID): mock_probe})
+
+        asyncio.run(service.poll_once())
+
+        mock_probe.assert_called_once()
+        assert mock_probe.call_args[0] == (mock_handle, DEVICE_IDX)
+
+    def test_zero_voltage_skips_smoothing(self, mocker):
+        """SteelSeries (voltage_mv=0) uses result.percent directly; no smoothing deque update."""
+        service, _, ui_queue, registry = self._setup_with_open_device(mocker)
+
+        # Inject SS key alongside G Pro X (info dict, not a handle)
+        ss_info = {"vendor_id": SS_VID, "product_id": SS_PID, "interface_number": 3, "path": b"/dev/hid3"}
+        service._open[SS_KEY] = ss_info
+        from monitor.state import DeviceState
+        registry.upsert(DeviceState(
+            vid=SS_VID, pid=SS_PID, dev_idx=SS_DEVICE_IDX,
+            device_name="Aerox 5 Wireless", percent=None,
+            charging=False, status=DeviceStatus.ONLINE,
+        ))
+
+        # Configure mock handle so real ss_battery_probe returns BatteryResult(20, 0, ...)
+        # raw=5 → pct=(5-1)*5=20, not charging (bit 7 clear)
+        mock_fresh_handle = mocker.MagicMock()
+        mock_fresh_handle.read.side_effect = (
+            [[], [], []]                          # 3 warmup reads → empty
+            + [[0xD2, 0x05] + [0x00] * 62]       # battery response: raw=5 → pct=20
+        )
+        mocker.patch("monitor.service.open_dongle", return_value=mock_fresh_handle)
+        mocker.patch.dict("monitor.service.DEVICE_PROBES", {
+            (GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(75, 3990, False, "0x06/0x0D"),
+            (SS_VID, SS_PID): _ss_battery_probe,
+        })
+
+        asyncio.run(service.poll_once())
+
+        ss_state = registry.get(SS_KEY)
+        assert ss_state is not None
+        assert ss_state.percent == 20
+        # Voltage history must NOT have been updated for the SS key (no smoothing)
+        assert SS_KEY not in service._voltage_history
 
 
 # ---------------------------------------------------------------------------
