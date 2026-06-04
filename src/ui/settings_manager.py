@@ -20,7 +20,7 @@ from pathlib import Path
 CONFIG_DIR: Path = Path(os.environ["APPDATA"]) / "PeriphWatcher"
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
-_DEFAULTS: dict = {"launch_at_startup": False}
+_DEFAULTS: dict = {"launch_at_startup": False, "thresholds": {}}
 
 # ---------------------------------------------------------------------------
 # winreg constants

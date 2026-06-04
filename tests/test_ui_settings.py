@@ -24,7 +24,7 @@ def test_load_config_returns_defaults_when_file_absent(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "CONFIG_FILE", tmp_path / "config.json")
 
     result = load_config()
-    assert result == {"launch_at_startup": False}
+    assert result == {"launch_at_startup": False, "thresholds": {}}
 
 
 def test_load_config_returns_defaults_on_malformed_json(tmp_path, monkeypatch):
@@ -36,7 +36,7 @@ def test_load_config_returns_defaults_on_malformed_json(tmp_path, monkeypatch):
     monkeypatch.setattr(sm, "CONFIG_FILE", config_file)
 
     result = load_config()
-    assert result == {"launch_at_startup": False}
+    assert result == {"launch_at_startup": False, "thresholds": {}}
 
 
 def test_save_and_load_config_roundtrip(tmp_path, monkeypatch):
@@ -48,7 +48,7 @@ def test_save_and_load_config_roundtrip(tmp_path, monkeypatch):
 
     save_config({"launch_at_startup": True})
     result = load_config()
-    assert result == {"launch_at_startup": True}
+    assert result == {"launch_at_startup": True, "thresholds": {}}
 
 
 def test_save_config_creates_directory(tmp_path, monkeypatch):
