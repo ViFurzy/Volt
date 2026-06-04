@@ -164,7 +164,12 @@ Plans:
   3. After a notification fires for a device, no further notification is sent for that device until the cooldown period has elapsed (default 4 hours)
   4. The cooldown resets if the device goes offline and returns online (preventing a single low-battery state from blocking alerts across sessions)
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+
+- [ ] 06-01-PLAN.md — NotificationManager class + 7 unit tests (TDD, Wave 1)
+- [ ] 06-02-PLAN.md — Install windows-toasts, extend settings_manager defaults, wire into __main__.py (Wave 2)
+- [ ] 06-03-PLAN.md — Hardware checkpoint: toast in Action Center, cooldown verification (Wave 3, autonomous: false)
 
 ### Phase 7: Packaging + Distribution
 
