@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 from monitor.app import MonitorApp
 from monitor.state import DeviceState
+from ui.icon import make_volt_icon
 from ui.main_window import MainWindow
 from ui.notification_manager import NotificationManager
 from ui.settings_manager import load_config
@@ -33,7 +34,11 @@ def main() -> None:
     qapp.setQuitOnLastWindowClosed(False)  # REQUIRED: keeps process alive when window hides (Pitfall 2)
     qapp.setStyleSheet(DARK_QSS)
 
+    _icon = make_volt_icon()
+    qapp.setWindowIcon(_icon)
+
     window = MainWindow()
+    window.setWindowIcon(_icon)
     tray = TrayManager(window, qapp)
     tray.show()
 

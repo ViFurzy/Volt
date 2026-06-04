@@ -3,13 +3,10 @@
 Pattern 1 from RESEARCH: icon + menu set BEFORE show() (Pitfall 3).
 DoubleClick on the tray icon restores the main window (D-07).
 """
-from pathlib import Path
-
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-# Resolve icon path relative to this module so cwd cannot break it (T-04-06).
-_ICON_PATH: Path = Path(__file__).parent.parent / "assets" / "tray_icon.png"
+from ui.icon import make_volt_icon
 
 
 class TrayManager:
@@ -29,8 +26,8 @@ class TrayManager:
         self._window = window
 
         self._tray = QSystemTrayIcon(parent=qapp)
-        self._tray.setIcon(QIcon(str(_ICON_PATH)))
-        self._tray.setToolTip("PeriphWatcher")
+        self._tray.setIcon(make_volt_icon())
+        self._tray.setToolTip("VOLT | POWER CENTER")
 
         # Build context menu (D-07): Show | ---- | Quit
         self._menu = QMenu()

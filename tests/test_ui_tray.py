@@ -51,7 +51,9 @@ def test_context_activation_does_not_call_show_restore(qapp):
     window.show_restore.assert_not_called()
 
 
-def test_tray_icon_path_exists(qapp):
-    """The tray icon PNG must exist on disk (T-04-06)."""
-    from ui.tray import _ICON_PATH
-    assert _ICON_PATH.exists(), f"tray_icon.png not found at {_ICON_PATH}"
+def test_volt_icon_is_valid(qapp):
+    """make_volt_icon() must return a non-null QIcon with at least one size."""
+    from ui.icon import make_volt_icon
+    icon = make_volt_icon()
+    assert not icon.isNull(), "make_volt_icon() returned a null QIcon"
+    assert icon.availableSizes(), "QIcon has no available sizes"
