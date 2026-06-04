@@ -367,17 +367,17 @@ def test_fires_on_threshold_crossing():
 | A2 | `WindowsToaster("PeriphWatcher")` is a valid AUMID-less toaster that works on Windows 11 for unpackaged desktop apps | Code Examples | If Windows 11 requires a registered AUMID, must switch to `InteractableWindowsToaster` with a registered shortcut |
 | A3 | Decimal `f"{vid}:{pid}"` string keys in config JSON are sufficient for device identity (no collision) | Architecture Patterns | If two devices share VID:PID (impossible by design), key would collide — but KNOWN_DEVICES already prevents this |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `WindowsToaster` work for unpackaged Python apps on Windows 11 without an AUMID shortcut?**
    - What we know: Windows 10 allowed it. Windows 11 tightened notification requirements for some app types. The GitHub README shows the simple `WindowsToaster('Python')` pattern without mentioning AUMID registration.
    - What's unclear: Whether Windows 11 requires a Start Menu shortcut with AppUserModelID for toast display.
-   - Recommendation: Plan Wave 1 includes a quick smoke test (`py -m src` shows a test toast). If `WindowsToaster` fails silently, switch to `InteractableWindowsToaster` (which uses `cmd.exe` AUMID as fallback, always present on Windows). The hardware checkpoint plan will catch this.
+   - **RESOLVED: Confirmed at hardware checkpoint in 06-03 Task 1; fallback to `InteractableWindowsToaster` if `WindowsToaster` fails silently. 06-03 SUMMARY documents the confirmed toaster class.**
 
 2. **Should `NotificationManager.check()` re-load config on every call or cache it?**
    - What we know: `load_config()` reads a ~100-byte JSON file from disk. At 500ms drain interval, that is 2 disk reads/second max.
    - What's unclear: Whether disk I/O overhead is measurable in practice.
-   - Recommendation: For Phase 6 simplicity, accept the re-read (no user-visible performance impact). Phase 7 packaging can add a settings-change event if needed.
+   - **RESOLVED: Accept per-call re-read for Phase 6 simplicity (no user-visible performance impact at 2 reads/second on a 100-byte file). Caching deferred to Phase 7 if needed.**
 
 ## Environment Availability
 
