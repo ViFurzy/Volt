@@ -11,7 +11,7 @@
 - [x] **Phase 1: HID Connectivity PoC** - Prove Windows HID access via vendor-specific usage page; establish threading foundation *(complete 2026-06-01)*
 - [x] **Phase 2: HID++ 2.0 Protocol** - Logitech feature discovery, battery probe chain, offline handling; battery data flows to stdout *(complete 2026-06-02)*
 - [x] **Phase 3: MonitorService + DeviceRegistry** - Asyncio background thread, 60s polling loop, hot-plug detection, queue-based updates (completed 2026-06-02)
-- [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
+- [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
 - [ ] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic
 - [ ] **Phase 7: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
@@ -137,7 +137,20 @@ Plans:
   3. The SteelSeries device appears as a live device card in the main window with the same data shape (name, %, charging status) as Logitech devices
   4. Dongle unplug marks the SteelSeries device OFFLINE via the same HID-04 code path used by the Logitech backend (no duplicate offline logic)
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — src/steelseries/__init__.py + src/steelseries/driver.py: find_dongle, open_dongle, ss_battery_probe + tests/test_steelseries_driver.py (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-02-PLAN.md — src/monitor/state.py: KNOWN_DEVICES + DEVICE_PROBES; src/monitor/service.py: discover SS enumeration, poll_once dispatch, smoothing guard; tests/test_service.py: migrate patches + new SS tests (Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 05-03-PLAN.md — Hardware integration checkpoint: full app with both dongles, unplug/replug cycles, HID-02 gate (Wave 3, autonomous: false)
 
 ### Phase 6: Notifications
 
@@ -173,11 +186,11 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. HID Connectivity PoC | 2/2 | ✓ Complete | 2026-06-01 |
-| 2. HID++ 2.0 Protocol | 4/4 | ✓ Complete | 2026-06-02 |
+| 1. HID Connectivity PoC | 2/2 | Complete | 2026-06-01 |
+| 2. HID++ 2.0 Protocol | 4/4 | Complete | 2026-06-02 |
 | 3. MonitorService + DeviceRegistry | 4/4 | Complete   | 2026-06-02 |
 | 4. Qt UI — Window + Tray | 4/4 | Complete   | 2026-06-02 |
-| 5. SteelSeries HID Backend | 0/? | Not started | - |
+| 5. SteelSeries HID Backend | 0/3 | Not started | - |
 | 6. Notifications | 0/? | Not started | - |
 | 7. Packaging + Distribution | 0/? | Not started | - |
 
@@ -197,4 +210,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
-*Last updated: 2026-06-02 — Phase 3 planned: 4 plans in 4 waves*
+*Last updated: 2026-06-04 — Phase 5 planned: 3 plans in 3 waves*
