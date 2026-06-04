@@ -14,9 +14,18 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from monitor.app import MonitorApp
+from monitor.state import DeviceState
 from ui.main_window import MainWindow
+from ui.notification_manager import NotificationManager
+from ui.settings_manager import load_config
 from ui.styles import DARK_QSS
 from ui.tray import TrayManager
+
+
+def _on_device_update(window: MainWindow, notif_manager: NotificationManager, state: DeviceState) -> None:
+    window.on_device_update(state)
+    cfg = load_config()
+    notif_manager.check(state, cfg)
 
 
 def main() -> None:
@@ -35,7 +44,8 @@ def main() -> None:
     sigint_timer.start(200)
     sigint_timer.timeout.connect(lambda: None)  # wake Python every 200ms
 
-    app_obj = MonitorApp(consumer=window.on_device_update, poll_interval=2.0)
+    notif_manager = NotificationManager()
+    app_obj = MonitorApp(consumer=lambda s: _on_device_update(window, notif_manager, s), poll_interval=2.0)
     app_obj.start()
 
     # build_hotplug() MUST come after QApplication is created (winId requires it).
