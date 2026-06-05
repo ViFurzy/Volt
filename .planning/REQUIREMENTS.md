@@ -33,12 +33,14 @@
 - [x] **SYS-01**: App registers in Windows startup so it launches automatically at login, starting minimized to tray
 - [x] **SYS-02**: User settings (per-device thresholds, cooldown period) persist to disk and survive restarts
 
+### Bluetooth Device Discovery (Phase 7)
+
+- [x] **BT-01**: Read battery from Bluetooth-connected devices via WinRT OS battery property (`System.DeviceInterface.Bluetooth.Battery`) when available
+- [x] **BT-02**: Fall back to BLE GATT Battery Service (UUID 0x180F / 0x2A19) when OS property is absent and device supports BLE
+- [x] **BT-03**: Devices page shows a scan UI — enumerates paired BT devices and connected HID devices by name; user can add/remove from monitored list
+- [x] **BT-04**: Monitored device list persists in config; on startup MonitorService discovers and polls all persisted entries alongside built-in KNOWN_DEVICES
+
 ## v2 Requirements
-
-### Bluetooth
-
-- **BT-01**: Read battery from Bluetooth-connected devices via Windows BLE GATT Battery Service
-- **BT-02**: BLE device auto-discovery for paired Bluetooth peripherals
 
 ### UI Enhancements
 
@@ -78,6 +80,10 @@
 | UI-03 | Phase 4 | Complete |
 | NOTIF-01 | Phase 6 | Complete |
 | NOTIF-02 | Phase 6 | Complete |
+| BT-01 | Phase 7 | Pending |
+| BT-02 | Phase 7 | Pending |
+| BT-03 | Phase 7 | Pending |
+| BT-04 | Phase 7 | Pending |
 | SYS-01 | Phase 4 | Complete |
 | SYS-02 | Phase 4 | Complete |
 

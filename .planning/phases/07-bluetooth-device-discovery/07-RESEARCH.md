@@ -421,22 +421,25 @@ _DEFAULTS: dict = {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does WinRT battery PKEY `{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2` work on `DeviceInterface` kind or only `Device` kind?**
    - What we know: The PKEY is documented via community sources (PowerShell Get-PnpDeviceProperty); official Microsoft docs list other `System.DeviceInterface.Bluetooth.*` properties but not a battery one.
    - What's unclear: Whether `DeviceInformation.find_all_async()` with the default kind (`DeviceInterface`) returns this property, or whether a second lookup with `DeviceInformationKind.Device` is needed.
    - Recommendation: Plan a hardware validation task (Wave 1) that logs ALL properties for a known BT device before committing to the PKEY approach. If the property is always None, the WinRT tier (a) may need to use `DeviceInformationKind.Device` or fall through entirely for most devices.
+   - **RESOLVED by 07-02 hardware checkpoint** — probe confirms which DeviceInformationKind works; bt_backend.py adjusted accordingly.
 
 2. **BleakClient connection time vs 60s poll interval**
    - What we know: BLE connect takes 1-5 seconds; default poll is 60s; scan is triggered by user.
    - What's unclear: Whether we hold BleakClient connections open between polls (complex lifecycle) or reconnect per poll (simple but slow).
    - Recommendation: Reconnect per poll. At 60s interval, a 3-5s BLE connection cost is acceptable. Use `asyncio.gather()` for concurrent multi-device reads.
+   - **RESOLVED: reconnect-per-poll (no persistent BleakClient).** Rationale: 60s interval is far longer than BLE connection setup; a persistent connection would require heartbeat logic with no battery benefit.
 
 3. **Is `DeviceState.dev_idx` meaningful for BT devices?**
    - What we know: `DeviceState` uses `(vid, pid, dev_idx)` as key. BT devices don't have vid/pid in the HID sense.
    - What's unclear: How to key BT-only devices (no vid/pid) in the registry.
    - Recommendation: Use `(0, 0, hash(device_id) & 0xFFFF)` as synthetic key, OR extend `DeviceState` with an optional `bt_id: str | None` field and a separate `BtDeviceState` key scheme. The simpler path is a new `BtDeviceInfo` dataclass and a parallel `BtDeviceRegistry`.
+   - **RESOLVED: BtDeviceInfo dataclass with bt_id: str key** stored in a separate `_bt_devices` dict on MonitorService. No collision with `(vid, pid, dev_idx)` HID key scheme.
 
 ---
 

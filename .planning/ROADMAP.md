@@ -187,10 +187,24 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 07-01-PLAN.md — Install BLE/WinRT packages; implement src/monitor/bt_backend.py (winrt_enumerate_bt, gatt_battery, resolve_battery) + tests (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07-02-PLAN.md — Hardware PKEY validation checkpoint: confirm WinRT battery property behavior; adjust bt_backend.py if needed (Wave 2, autonomous: false)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07-03-PLAN.md — Extend state.py (BtDeviceInfo, BtScanResultEvent), settings_manager (monitored_devices), service.py (scan_bt_devices, BT polling) + tests (Wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07-04-PLAN.md — Implement DevicesPage; wire into MainWindow (replace placeholder); update MonitorApp.drain() for BT event routing + tests (Wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 07-05-PLAN.md — Hardware end-to-end checkpoint: BT-01/02/03/04 verification on real hardware (Wave 5, autonomous: false)
 
 ### Phase 8: Packaging + Distribution
