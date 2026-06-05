@@ -14,7 +14,8 @@
 - [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
 - [x] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic *(complete 2026-06-04)*
-- [ ] **Phase 7: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
+- [ ] **Phase 7: Bluetooth Device Discovery** - WinRT OS battery query + BLE GATT fallback, device scan UI, add/remove monitored devices
+- [ ] **Phase 8: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
 
 ---
 
@@ -171,10 +172,31 @@ Plans:
 - [x] 06-02-PLAN.md — Install windows-toasts, extend settings_manager defaults, wire into __main__.py (Wave 2)
 - [x] 06-03-PLAN.md — Hardware checkpoint: toast in Action Center, cooldown verification (Wave 3, autonomous: false)
 
-### Phase 7: Packaging + Distribution
+### Phase 7: Bluetooth Device Discovery
+
+**Goal**: Any paired Bluetooth or HID device visible to Windows can be discovered and monitored for battery level without manufacturer software, using a hybrid resolution strategy (WinRT OS → BLE GATT → protocol-specific)
+**Depends on**: Phase 6
+**Requirements**: BT-01, BT-02, BT-03, BT-04
+**Success Criteria** (what must be TRUE):
+
+  1. A scan on the Devices page enumerates all paired Bluetooth devices by name (from Windows device enumeration) and all connected HID devices by product string
+  2. For each discovered device the app attempts battery resolution in order: (a) WinRT `System.DeviceInterface.Bluetooth.Battery` OS property, (b) BLE GATT Battery Service characteristic 0x2A19, (c) known vendor protocol (Logitech HID++); unsupported devices show "battery unknown"
+  3. The user can add a discovered device to the monitored list (persisted in config) and remove it; the Dashboard card appears/disappears accordingly
+  4. The Stadia controller (BT HID mode) is discovered by name and its battery level is read via the WinRT OS property
+
+**Plans**: 5 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Install BLE/WinRT packages; implement src/monitor/bt_backend.py (winrt_enumerate_bt, gatt_battery, resolve_battery) + tests (Wave 1)
+- [ ] 07-02-PLAN.md — Hardware PKEY validation checkpoint: confirm WinRT battery property behavior; adjust bt_backend.py if needed (Wave 2, autonomous: false)
+- [ ] 07-03-PLAN.md — Extend state.py (BtDeviceInfo, BtScanResultEvent), settings_manager (monitored_devices), service.py (scan_bt_devices, BT polling) + tests (Wave 3)
+- [ ] 07-04-PLAN.md — Implement DevicesPage; wire into MainWindow (replace placeholder); update MonitorApp.drain() for BT event routing + tests (Wave 4)
+- [ ] 07-05-PLAN.md — Hardware end-to-end checkpoint: BT-01/02/03/04 verification on real hardware (Wave 5, autonomous: false)
+
+### Phase 8: Packaging + Distribution
 
 **Goal**: PeriphWatcher ships as a single Windows executable that runs on a machine with no Python installed and passes a clean-machine smoke test
-**Depends on**: Phase 6
+**Depends on**: Phase 7
 **Requirements**: (consolidates all prior phases into distributable form)
 **Success Criteria** (what must be TRUE):
 
@@ -197,7 +219,8 @@ Plans:
 | 4. Qt UI — Window + Tray | 4/4 | Complete   | 2026-06-02 |
 | 5. SteelSeries HID Backend | 0/3 | Not started | - |
 | 6. Notifications | 3/3 | Complete | 2026-06-04 |
-| 7. Packaging + Distribution | 0/? | Not started | - |
+| 7. Bluetooth Device Discovery | 0/5 | Not started | - |
+| 8. Packaging + Distribution | 0/? | Not started | - |
 
 ---
 
@@ -215,4 +238,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
-*Last updated: 2026-06-04 — Phase 5 planned: 3 plans in 3 waves*
+*Last updated: 2026-06-05 — Phase 7 planned: 5 plans in 5 waves*
