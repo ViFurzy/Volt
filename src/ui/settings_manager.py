@@ -20,7 +20,13 @@ from pathlib import Path
 CONFIG_DIR: Path = Path(os.environ["APPDATA"]) / "PeriphWatcher"
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
-_DEFAULTS: dict = {"launch_at_startup": False, "thresholds": {}, "close_behavior": None}
+_DEFAULTS: dict = {
+    "launch_at_startup": False,
+    "thresholds": {},
+    "close_behavior": None,
+    "cooldown_hours": 4,
+    "monitored_devices": [],  # list[dict] with keys: id, name, type, ble_address
+}
 
 # ---------------------------------------------------------------------------
 # winreg constants

@@ -6,6 +6,8 @@ other module in this package. No config-file loading — KNOWN_DEVICES is a
 hardcoded Python dict until multi-user customisation is required (deferred).
 """
 
+from __future__ import annotations
+
 import enum
 from dataclasses import dataclass
 
@@ -43,6 +45,34 @@ class DeviceState:
     percent: int | None
     charging: bool
     status: DeviceStatus
+
+
+@dataclass(frozen=True)
+class BtDeviceInfo:
+    """Snapshot of a discovered Bluetooth device (BT-01).
+
+    bt_id is the WinRT DeviceInformation.id string (stable across reboots).
+    ble_address is None for classic Bluetooth (BR/EDR) devices.
+    battery is None when no tier resolved a value.
+    """
+
+    bt_id: str
+    name: str
+    battery: int | None
+    ble_address: str | None
+    status: DeviceStatus
+
+
+@dataclass(frozen=True)
+class BtScanResultEvent:
+    """Event put on _ui_queue when a BT scan completes (BT-03).
+
+    Consumed by MonitorApp.drain() -> DevicesPage.on_scan_result().
+    devices contains both BT entries (type='bt') from winrt_enumerate_bt()
+    and HID entries (type='hid') from hid.enumerate().
+    """
+
+    devices: list[dict]
 
 
 # Hardcoded VID/PID → human-readable name registry (D-04, D-05).
