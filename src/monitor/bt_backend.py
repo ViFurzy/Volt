@@ -1,19 +1,25 @@
 """
 Bluetooth device battery resolution — three-tier chain.
 
-Tier (a): WinRT OS battery property via DeviceInformation.find_all_async.
+Tier (a): WinRT OS battery property via DeviceInformation.find_all_async_aqs_filter_and_additional_properties.
 Tier (b): BLE GATT Battery Service (UUID 0x180F / char 0x2A19) via bleak.
 Tier (c): Existing vendor protocol (HID++) handled by MonitorService for KNOWN_DEVICES.
 
 All functions are async. They run exclusively on the asyncio background thread
 via MonitorService — never called directly from the Qt main thread.
+
+Hardware findings (Plan 07-02, OUTCOME C):
+- BATTERY_PKEY returns None on all tested hardware (Sound Blaster FRee, Stadia Z6ZK).
+- Tier (a) always falls through to tier (b) GATT for BLE devices.
+- pywinrt 3.x uses descriptive method names per overload instead of Python-style
+  overloaded dispatch: find_all_async(aqs, props) → find_all_async_aqs_filter_and_additional_properties(aqs, props).
 """
 
 import asyncio
 
 from bleak import BleakClient, BleakError
 from bleak.exc import BleakCharacteristicNotFoundError
-from winrt.windows.devices.bluetooth import BluetoothDevice
+from winrt.windows.devices.bluetooth import BluetoothDevice, BluetoothLEDevice
 from winrt.windows.devices.enumeration import DeviceInformation
 
 # ---------------------------------------------------------------------------
@@ -30,29 +36,56 @@ BATTERY_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 
 
 async def winrt_enumerate_bt() -> list[dict]:
-    """Enumerate all paired Bluetooth devices and return their WinRT OS battery property.
+    """Enumerate paired Bluetooth (classic BT + BLE) devices and their WinRT OS battery property.
 
-    Uses BluetoothDevice.get_device_selector_from_pairing_state(True) to build an
-    AQS selector for paired-only devices (covers both BLE and classic BT).
+    Queries both BluetoothDevice and BluetoothLEDevice AQS selectors to cover
+    classic BT and BLE association endpoints. For BLE devices, ble_address is
+    extracted from the device id for tier (b) GATT fallback.
 
-    Returns a list of dicts with keys: id, name, battery (int or None), type ("bt").
-    Returns [] on any WinRT error.
+    Returns a list of dicts with keys: id, name, battery (int or None), type ("bt"),
+    ble_address (str or None). Returns [] on any WinRT error.
+
+    pywinrt 3.x note: WinRT overloads use descriptive method suffixes, not Python
+    overload dispatch. find_all_async(aqs, props) must be called as
+    find_all_async_aqs_filter_and_additional_properties(aqs, props).
     """
     try:
-        aqs = BluetoothDevice.get_device_selector_from_pairing_state(True)
         additional_props = ["System.ItemNameDisplay", BATTERY_PKEY]
-        devices = await DeviceInformation.find_all_async(aqs, additional_props)
-        results = []
-        for d in devices:
-            battery_raw = d.properties.get(BATTERY_PKEY)
-            # T-07-01: isinstance guard — WinRT property bag may return unexpected types
-            battery_pct = int(battery_raw) if isinstance(battery_raw, (int, float)) else None
-            results.append({
-                "id": d.id,
-                "name": d.name,
-                "battery": battery_pct,
-                "type": "bt",
-            })
+        results: list[dict] = []
+        seen_names: set[str] = set()
+
+        for get_selector_fn in (
+            BluetoothDevice.get_device_selector_from_pairing_state,
+            BluetoothLEDevice.get_device_selector_from_pairing_state,
+        ):
+            try:
+                aqs = get_selector_fn(True)
+                devices = await DeviceInformation.find_all_async_aqs_filter_and_additional_properties(
+                    aqs, additional_props
+                )
+            except Exception:
+                continue
+            for d in devices:
+                if d.name in seen_names:
+                    continue
+                seen_names.add(d.name)
+                battery_raw = d.properties.get(BATTERY_PKEY)
+                # T-07-01: isinstance guard — WinRT property bag may return unexpected types
+                battery_pct = int(battery_raw) if isinstance(battery_raw, (int, float)) else None
+                # Extract BLE address from id for GATT tier (b).
+                # BLE device ids have the form: BluetoothLE#BluetoothLE<local>-<device>
+                ble_address: str | None = None
+                if "BluetoothLE" in d.id and "-" in d.id:
+                    ble_address = d.id.rsplit("-", 1)[-1].replace(":", ":").upper()
+                    if len(ble_address) != 17:  # not a valid MAC address
+                        ble_address = None
+                results.append({
+                    "id": d.id,
+                    "name": d.name,
+                    "battery": battery_pct,
+                    "type": "bt",
+                    "ble_address": ble_address,
+                })
         return results
     except Exception:
         return []

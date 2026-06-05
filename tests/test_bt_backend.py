@@ -31,12 +31,21 @@ class TestWinrtEnumerate:
         mock_device.name = "Test Device"
         mock_device.properties = {BATTERY_PKEY: 75}
 
+        # pywinrt 3.x uses descriptive method name per overload (Plan 07-02 finding)
         mock_find = AsyncMock(return_value=[mock_device])
-        mocker.patch("monitor.bt_backend.DeviceInformation.find_all_async", mock_find)
+        mocker.patch(
+            "monitor.bt_backend.DeviceInformation.find_all_async_aqs_filter_and_additional_properties",
+            mock_find,
+        )
 
         result = asyncio.run(winrt_enumerate_bt())
 
-        assert result == [{"id": "dev://1", "name": "Test Device", "battery": 75, "type": "bt"}]
+        assert len(result) == 1
+        assert result[0]["id"] == "dev://1"
+        assert result[0]["name"] == "Test Device"
+        assert result[0]["battery"] == 75
+        assert result[0]["type"] == "bt"
+        assert result[0]["ble_address"] is None  # "dev://1" has no BluetoothLE in id
 
     def test_battery_property_none_when_absent(self, mocker):
         """Battery property returns None — dict entry is None."""
@@ -46,7 +55,10 @@ class TestWinrtEnumerate:
         mock_device.properties = {BATTERY_PKEY: None}
 
         mock_find = AsyncMock(return_value=[mock_device])
-        mocker.patch("monitor.bt_backend.DeviceInformation.find_all_async", mock_find)
+        mocker.patch(
+            "monitor.bt_backend.DeviceInformation.find_all_async_aqs_filter_and_additional_properties",
+            mock_find,
+        )
 
         result = asyncio.run(winrt_enumerate_bt())
 
@@ -60,7 +72,10 @@ class TestWinrtEnumerate:
         mock_device.properties = {BATTERY_PKEY: "not-a-number"}
 
         mock_find = AsyncMock(return_value=[mock_device])
-        mocker.patch("monitor.bt_backend.DeviceInformation.find_all_async", mock_find)
+        mocker.patch(
+            "monitor.bt_backend.DeviceInformation.find_all_async_aqs_filter_and_additional_properties",
+            mock_find,
+        )
 
         result = asyncio.run(winrt_enumerate_bt())
 
