@@ -37,11 +37,6 @@ def main() -> None:
     _icon = make_volt_icon()
     qapp.setWindowIcon(_icon)
 
-    window = MainWindow()
-    window.setWindowIcon(_icon)
-    tray = TrayManager(window, qapp)
-    tray.show()
-
     # Qt's event loop on Windows swallows SIGINT unless a QTimer is ticking.
     # A 200ms heartbeat lets Python process the signal; the handler calls quit().
     signal.signal(signal.SIGINT, lambda *_: qapp.quit())
@@ -50,7 +45,27 @@ def main() -> None:
     sigint_timer.timeout.connect(lambda: None)  # wake Python every 200ms
 
     notif_manager = NotificationManager()
-    app_obj = MonitorApp(consumer=lambda s: _on_device_update(window, notif_manager, s), poll_interval=2.0)
+
+    # Create MonitorApp with placeholder consumers; back-patch after window exists
+    app_obj = MonitorApp(
+        consumer=lambda s: None,  # placeholder, patched below
+        bt_consumer=None,
+        scan_consumer=None,
+        poll_interval=60.0,  # production polling interval
+    )
+
+    # Create MainWindow with service and loop from app_obj
+    window = MainWindow(service=app_obj.service, loop=app_obj.service._loop)
+    window.setWindowIcon(_icon)
+
+    tray = TrayManager(window, qapp)
+    tray.show()
+
+    # Back-patch consumers now that window exists
+    app_obj._consumer = lambda s: _on_device_update(window, notif_manager, s)
+    app_obj._bt_consumer = window.on_bt_device_update
+    app_obj._scan_consumer = window.on_scan_result
+
     app_obj.start()
 
     # build_hotplug() MUST come after QApplication is created (winId requires it).

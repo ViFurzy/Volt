@@ -94,3 +94,21 @@ class TestDevicesPageAddRemove:
         page._monitored_list.setCurrentRow(0)
         page._on_remove_clicked()
         callback.assert_called_once_with("dev://1")
+
+
+class TestMainWindowBt:
+    def test_remove_card_from_dashboard(self, qapp):
+        from ui.main_window import MainWindow
+        from monitor.state import BtDeviceInfo, DeviceStatus
+        window = MainWindow(service=None, loop=None)
+        info = BtDeviceInfo(
+            bt_id="dev://1",
+            name="Stadia",
+            battery=80,
+            ble_address=None,
+            status=DeviceStatus.ONLINE,
+        )
+        window.on_bt_device_update(info)
+        assert "dev://1" in window._cards
+        window.remove_bt_card("dev://1")
+        assert len(window._cards) == 0

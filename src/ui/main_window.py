@@ -36,7 +36,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from monitor.state import BtDeviceInfo, BtScanResultEvent
 from ui.device_card import DeviceCard
+from ui.devices_page import DevicesPage
 from ui.settings_manager import load_config, save_config
 from ui.settings_page import SettingsPage
 from ui.sidebar import SidebarNav
@@ -48,8 +50,10 @@ if TYPE_CHECKING:
 class MainWindow(QMainWindow):
     """Main application window for VOLT | POWER CENTER."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, service=None, loop=None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._service = service
+        self._loop = loop
         self.setWindowTitle("VOLT | POWER CENTER")
         self.resize(960, 620)
 
@@ -60,9 +64,17 @@ class MainWindow(QMainWindow):
         dashboard_page, self.dashboard_layout, self._count_label = self._build_dashboard()
         self._stack.addWidget(dashboard_page)   # index 0
 
-        # Pages 1-3 — Placeholders
-        for name in ("Devices", "History", "Profiles"):
-            self._stack.addWidget(_PlaceholderPage(name))  # indices 1, 2, 3
+        # Page 1 — Devices
+        self._devices_page = DevicesPage(
+            service=service,
+            loop=loop,
+            remove_card_callback=self.remove_bt_card,
+        )
+        self._stack.addWidget(self._devices_page)           # index 1
+
+        # Pages 2-3 — Placeholders
+        for name in ("History", "Profiles"):
+            self._stack.addWidget(_PlaceholderPage(name))   # indices 2, 3
 
         # Page 4 — Settings
         self._settings_page = SettingsPage()
@@ -80,8 +92,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._stack)
         self.setCentralWidget(central)
 
-        # Device card registry keyed by (vid, pid, dev_idx)
-        self._cards: dict[tuple[int, int, int], DeviceCard] = {}
+        # Device card registry: keyed by (vid, pid, dev_idx) for HID devices, str bt_id for BT devices
+        self._cards: dict = {}
 
     # ── Dashboard builder ──────────────────────────────────────────
 
@@ -182,6 +194,54 @@ class MainWindow(QMainWindow):
             self._count_label.setText(f"All Devices ({len(self._cards)})")
         else:
             self._cards[key].update_state(state)
+
+    def on_bt_device_update(self, info: BtDeviceInfo) -> None:
+        """Create or update a DeviceCard for a BT device keyed by bt_id.
+
+        Uses info.bt_id as the card registry key (string, not tuple).
+        Card created when first battery reading arrives; updated on subsequent polls.
+        """
+        from monitor.state import DeviceState, DeviceStatus
+        key = info.bt_id
+        if key not in self._cards:
+            adapter = DeviceState(
+                vid=0, pid=0, dev_idx=0,
+                device_name=info.name,
+                percent=info.battery,
+                charging=False,
+                status=DeviceStatus.ONLINE,
+            )
+            card = DeviceCard(adapter)
+            self._cards[key] = card
+            stretch_idx = self.dashboard_layout.count() - 1
+            self.dashboard_layout.insertWidget(stretch_idx, card)
+            self._sidebar.register_device(key, info.name)
+            self._count_label.setText(f"All Devices ({len(self._cards)})")
+        else:
+            adapter = DeviceState(
+                vid=0, pid=0, dev_idx=0,
+                device_name=info.name,
+                percent=info.battery,
+                charging=False,
+                status=DeviceStatus.ONLINE,
+            )
+            self._cards[key].update_state(adapter)
+
+    def remove_bt_card(self, bt_id: str) -> None:
+        """Remove the dashboard card for a BT device.
+
+        Called by DevicesPage._on_remove_clicked. Pops the card from _cards
+        and detaches it from the layout by reparenting to None.
+        Safe to call when no card exists for bt_id (no-op).
+        """
+        card = self._cards.pop(bt_id, None)
+        if card:
+            card.setParent(None)
+            self._count_label.setText(f"All Devices ({len(self._cards)})")
+
+    def on_scan_result(self, devices: list) -> None:
+        """Route scan results to the DevicesPage list widget (BT-03)."""
+        self._devices_page.on_scan_result(devices)
 
 
 class _CloseDialog(QDialog):

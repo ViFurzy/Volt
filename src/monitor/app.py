@@ -20,7 +20,7 @@ from PySide6.QtCore import QTimer
 from monitor.hotplug import HotPlugWatcher
 from monitor.registry import DeviceRegistry
 from monitor.service import MonitorService
-from monitor.state import DeviceState
+from monitor.state import BtDeviceInfo, BtScanResultEvent, DeviceState
 
 
 class MonitorApp:
@@ -42,6 +42,8 @@ class MonitorApp:
     def __init__(
         self,
         consumer: Callable[[DeviceState], None],
+        bt_consumer=None,
+        scan_consumer=None,
         poll_interval: float = 60.0,
         drain_ms: int = 500,
     ) -> None:
@@ -49,6 +51,8 @@ class MonitorApp:
         self.registry = DeviceRegistry()
         self.service = MonitorService(self.ui_queue, self.registry, poll_interval)
         self._consumer = consumer
+        self._bt_consumer = bt_consumer
+        self._scan_consumer = scan_consumer
         self._drain_ms = drain_ms
 
     def build_hotplug(self) -> HotPlugWatcher:
@@ -63,16 +67,28 @@ class MonitorApp:
         return watcher
 
     def drain(self) -> None:
-        """Drain all queued DeviceState snapshots and pass each to the consumer.
+        """Drain all queued events and route to the appropriate consumer.
 
         Called by QTimer every drain_ms on the Qt main thread. Mirrors the
         drain_queue pattern from threading_stub.py lines 32-41.
         Silently exits on queue.Empty — that is the normal empty-cycle case.
+
+        Routes:
+          BtScanResultEvent → _scan_consumer(event.devices)
+          BtDeviceInfo      → _bt_consumer(event)
+          DeviceState       → _consumer(event)  (existing HID path)
         """
         try:
             while True:
-                state: DeviceState = self.ui_queue.get_nowait()
-                self._consumer(state)
+                event = self.ui_queue.get_nowait()
+                if isinstance(event, BtScanResultEvent):
+                    if self._scan_consumer:
+                        self._scan_consumer(event.devices)
+                elif isinstance(event, BtDeviceInfo):
+                    if self._bt_consumer:
+                        self._bt_consumer(event)
+                else:
+                    self._consumer(event)
         except queue.Empty:
             pass
 
