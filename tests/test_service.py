@@ -14,7 +14,7 @@ from hidpp.receiver import DEVICE_IDX
 from hidpp.features import BatteryResult
 from monitor.registry import DeviceRegistry
 from monitor.service import MonitorService
-from monitor.state import DeviceStatus, KNOWN_DEVICES
+from monitor.state import DeviceStatus, KNOWN_DEVICES, BtDeviceInfo, BtScanResultEvent
 from steelseries.driver import SS_DEVICE_IDX
 from steelseries.driver import ss_battery_probe as _ss_battery_probe
 
@@ -392,3 +392,110 @@ class TestSafetyInvariants:
                     pytest.fail(
                         f"Found forbidden hid.open() call at line {node.lineno}"
                     )
+
+
+# ---------------------------------------------------------------------------
+# BT device integration tests
+# ---------------------------------------------------------------------------
+
+class TestBtDevices:
+    def test_scan_bt_devices_puts_scan_result_on_queue(self, mocker):
+        """_run_bt_scan() with one BT device puts BtScanResultEvent on the queue."""
+        mocker.patch(
+            "monitor.service.bt_backend.winrt_enumerate_bt",
+            return_value=[{"id": "dev://1", "name": "Stadia", "battery": 82, "type": "bt"}],
+        )
+        mocker.patch("monitor.service.hid.enumerate", return_value=[])
+        service = make_service()
+
+        asyncio.run(service._run_bt_scan())
+
+        assert not service._ui_queue.empty()
+        event = service._ui_queue.get_nowait()
+        assert isinstance(event, BtScanResultEvent)
+        assert event.devices[0]["name"] == "Stadia"
+
+    def test_scan_bt_devices_includes_hid_entries(self, mocker):
+        """_run_bt_scan() merges hid.enumerate() HID entries into BtScanResultEvent.devices."""
+        mocker.patch("monitor.service.bt_backend.winrt_enumerate_bt", return_value=[])
+        mocker.patch(
+            "monitor.service.hid.enumerate",
+            return_value=[
+                {
+                    "product_string": "G502 X Plus",
+                    "vendor_id": 0x046D,
+                    "product_id": 0xC098,
+                    "usage_page": 0xFF00,
+                    "path": b"hid_path",
+                }
+            ],
+        )
+        service = make_service()
+
+        asyncio.run(service._run_bt_scan())
+
+        event = service._ui_queue.get_nowait()
+        assert isinstance(event, BtScanResultEvent)
+        hid_entries = [d for d in event.devices if d["type"] == "hid"]
+        assert len(hid_entries) == 1
+        assert hid_entries[0]["name"] == "G502 X Plus"
+
+    def test_scan_bt_devices_stores_in_bt_devices_dict(self, mocker):
+        """_run_bt_scan() populates _bt_devices dict with BtDeviceInfo entries."""
+        mocker.patch(
+            "monitor.service.bt_backend.winrt_enumerate_bt",
+            return_value=[{"id": "dev://1", "name": "Stadia", "battery": 82, "type": "bt"}],
+        )
+        mocker.patch("monitor.service.hid.enumerate", return_value=[])
+        service = make_service()
+
+        asyncio.run(service._run_bt_scan())
+
+        assert "dev://1" in service._bt_devices
+        info = service._bt_devices["dev://1"]
+        assert isinstance(info, BtDeviceInfo)
+        assert info.name == "Stadia"
+        assert info.battery == 82
+
+    def test_poll_once_refreshes_persisted_bt_device(self, mocker):
+        """poll_once() calls resolve_battery for each BT device and puts updated BtDeviceInfo on queue."""
+        mocker.patch(
+            "monitor.service.bt_backend.resolve_battery",
+            return_value=60,
+        )
+        # Patch HID side so poll_once() doesn't try real HID
+        mocker.patch("monitor.service.find_receiver", return_value=[])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
+        service = make_service()
+        service._bt_devices["dev://1"] = BtDeviceInfo(
+            bt_id="dev://1",
+            name="Stadia",
+            battery=None,
+            ble_address=None,
+            status=DeviceStatus.ONLINE,
+        )
+
+        asyncio.run(service.poll_once())
+
+        event = service._ui_queue.get_nowait()
+        assert isinstance(event, BtDeviceInfo)
+        assert event.battery == 60
+
+    def test_discover_loads_persisted_bt_devices_from_config(self, mocker):
+        """discover() reads config['monitored_devices'] and pre-populates _bt_devices."""
+        mocker.patch(
+            "monitor.service.load_config",
+            return_value={
+                "monitored_devices": [
+                    {"id": "dev://1", "name": "Stadia", "type": "bt", "ble_address": None}
+                ]
+            },
+        )
+        mocker.patch("monitor.service.bt_backend.winrt_enumerate_bt", return_value=[])
+        mocker.patch("monitor.service.find_receiver", return_value=[])
+        mocker.patch("monitor.service.find_dongle", return_value=[])
+        service = make_service()
+
+        asyncio.run(service.discover())
+
+        assert "dev://1" in service._bt_devices
