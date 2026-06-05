@@ -143,6 +143,8 @@ class DevicesPage(QWidget):
         monitored.append(entry)
         cfg["monitored_devices"] = monitored
         save_config(cfg)
+        if self._service is not None:
+            self._service.add_bt_device(entry)
         label = f"{entry['name']}  |  {entry['type'].upper()}"
         item = QListWidgetItem(label)
         item.setData(Qt.ItemDataRole.UserRole, entry)

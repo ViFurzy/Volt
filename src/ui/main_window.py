@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
         self._loop = loop
         self.setWindowTitle("VOLT | POWER CENTER")
         self.resize(960, 620)
+        self.setMinimumSize(760, 520)
 
         # ── Stack pages ────────────────────────────────────────────
         self._stack = QStackedWidget()
@@ -102,6 +103,10 @@ class MainWindow(QMainWindow):
     ) -> tuple[QWidget, QHBoxLayout, QLabel]:
         """Return (scroll-wrapped page, card row layout, count label)."""
         container = QWidget()
+        # Minimum width: 2 cards (220px each) + spacing (16px) + margins (48px) = 504px.
+        # QScrollArea respects this even with widgetResizable=True, so horizontal scroll
+        # kicks in before cards get squashed.
+        container.setMinimumWidth(504)
         outer = QVBoxLayout(container)
         outer.setContentsMargins(24, 20, 24, 20)
         outer.setSpacing(16)
@@ -230,14 +235,18 @@ class MainWindow(QMainWindow):
     def remove_bt_card(self, bt_id: str) -> None:
         """Remove the dashboard card for a BT device.
 
-        Called by DevicesPage._on_remove_clicked. Pops the card from _cards
-        and detaches it from the layout by reparenting to None.
+        Called by DevicesPage._on_remove_clicked. Pops the card from _cards,
+        detaches it from the layout, removes its sidebar sub-item, and stops
+        the service from polling it.
         Safe to call when no card exists for bt_id (no-op).
         """
         card = self._cards.pop(bt_id, None)
         if card:
             card.setParent(None)
             self._count_label.setText(f"All Devices ({len(self._cards)})")
+        self._sidebar.remove_device(bt_id)
+        if self._service is not None:
+            self._service.remove_bt_device(bt_id)
 
     def on_scan_result(self, devices: list) -> None:
         """Route scan results to the DevicesPage list widget (BT-03)."""

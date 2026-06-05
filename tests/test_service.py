@@ -405,7 +405,6 @@ class TestBtDevices:
             "monitor.service.bt_backend.winrt_enumerate_bt",
             return_value=[{"id": "dev://1", "name": "Stadia", "battery": 82, "type": "bt"}],
         )
-        mocker.patch("monitor.service.hid.enumerate", return_value=[])
         service = make_service()
 
         asyncio.run(service._run_bt_scan())
@@ -415,20 +414,11 @@ class TestBtDevices:
         assert isinstance(event, BtScanResultEvent)
         assert event.devices[0]["name"] == "Stadia"
 
-    def test_scan_bt_devices_includes_hid_entries(self, mocker):
-        """_run_bt_scan() merges hid.enumerate() HID entries into BtScanResultEvent.devices."""
-        mocker.patch("monitor.service.bt_backend.winrt_enumerate_bt", return_value=[])
+    def test_scan_bt_devices_excludes_hid_entries(self, mocker):
+        """_run_bt_scan() only includes BT devices — no hid.enumerate() results."""
         mocker.patch(
-            "monitor.service.hid.enumerate",
-            return_value=[
-                {
-                    "product_string": "G502 X Plus",
-                    "vendor_id": 0x046D,
-                    "product_id": 0xC098,
-                    "usage_page": 0xFF00,
-                    "path": b"hid_path",
-                }
-            ],
+            "monitor.service.bt_backend.winrt_enumerate_bt",
+            return_value=[{"id": "dev://bt1", "name": "Stadia", "battery": None, "type": "bt", "ble_address": None}],
         )
         service = make_service()
 
@@ -436,26 +426,19 @@ class TestBtDevices:
 
         event = service._ui_queue.get_nowait()
         assert isinstance(event, BtScanResultEvent)
-        hid_entries = [d for d in event.devices if d["type"] == "hid"]
-        assert len(hid_entries) == 1
-        assert hid_entries[0]["name"] == "G502 X Plus"
+        assert all(d["type"] == "bt" for d in event.devices)
 
-    def test_scan_bt_devices_stores_in_bt_devices_dict(self, mocker):
-        """_run_bt_scan() populates _bt_devices dict with BtDeviceInfo entries."""
+    def test_scan_bt_devices_does_not_store_in_bt_devices_dict(self, mocker):
+        """_run_bt_scan() must NOT populate _bt_devices; only add_bt_device()/discover() do that."""
         mocker.patch(
             "monitor.service.bt_backend.winrt_enumerate_bt",
             return_value=[{"id": "dev://1", "name": "Stadia", "battery": 82, "type": "bt"}],
         )
-        mocker.patch("monitor.service.hid.enumerate", return_value=[])
         service = make_service()
 
         asyncio.run(service._run_bt_scan())
 
-        assert "dev://1" in service._bt_devices
-        info = service._bt_devices["dev://1"]
-        assert isinstance(info, BtDeviceInfo)
-        assert info.name == "Stadia"
-        assert info.battery == 82
+        assert "dev://1" not in service._bt_devices
 
     def test_poll_once_refreshes_persisted_bt_device(self, mocker):
         """poll_once() calls resolve_battery for each BT device and puts updated BtDeviceInfo on queue."""

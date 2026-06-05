@@ -27,6 +27,7 @@ from winrt.windows.devices.enumeration import DeviceInformation
 # ---------------------------------------------------------------------------
 
 BATTERY_PKEY = "{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2"
+IS_CONNECTED_PKEY = "System.Devices.Aep.IsConnected"
 BATTERY_SERVICE_UUID = "0000180f-0000-1000-8000-00805f9b34fb"
 BATTERY_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
 
@@ -50,7 +51,7 @@ async def winrt_enumerate_bt() -> list[dict]:
     find_all_async_aqs_filter_and_additional_properties(aqs, props).
     """
     try:
-        additional_props = ["System.ItemNameDisplay", BATTERY_PKEY]
+        additional_props = ["System.ItemNameDisplay", BATTERY_PKEY, IS_CONNECTED_PKEY]
         results: list[dict] = []
         seen_names: set[str] = set()
 
@@ -66,6 +67,8 @@ async def winrt_enumerate_bt() -> list[dict]:
             except Exception:
                 continue
             for d in devices:
+                if not d.properties.get(IS_CONNECTED_PKEY):
+                    continue  # skip paired-but-not-connected devices
                 if d.name in seen_names:
                     continue
                 seen_names.add(d.name)

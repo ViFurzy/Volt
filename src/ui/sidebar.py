@@ -25,7 +25,7 @@ SIDEBAR_WIDTH: int = 210
 # (display label, stack page index)
 _NAV_ITEMS: list[tuple[str, int]] = [
     ("Dashboard", 0),
-    ("Devices",   0),
+    ("Devices",   1),
     ("Settings",  4),
 ]
 

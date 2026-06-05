@@ -13,6 +13,7 @@ import monitor.bt_backend as bt_backend
 from monitor.bt_backend import (
     BATTERY_CHAR_UUID,
     BATTERY_PKEY,
+    IS_CONNECTED_PKEY,
     gatt_battery,
     resolve_battery,
     winrt_enumerate_bt,
@@ -29,7 +30,7 @@ class TestWinrtEnumerate:
         mock_device = MagicMock()
         mock_device.id = "dev://1"
         mock_device.name = "Test Device"
-        mock_device.properties = {BATTERY_PKEY: 75}
+        mock_device.properties = {BATTERY_PKEY: 75, IS_CONNECTED_PKEY: True}
 
         # pywinrt 3.x uses descriptive method name per overload (Plan 07-02 finding)
         mock_find = AsyncMock(return_value=[mock_device])
@@ -52,7 +53,7 @@ class TestWinrtEnumerate:
         mock_device = MagicMock()
         mock_device.id = "dev://2"
         mock_device.name = "No Battery Device"
-        mock_device.properties = {BATTERY_PKEY: None}
+        mock_device.properties = {BATTERY_PKEY: None, IS_CONNECTED_PKEY: True}
 
         mock_find = AsyncMock(return_value=[mock_device])
         mocker.patch(
@@ -69,7 +70,7 @@ class TestWinrtEnumerate:
         mock_device = MagicMock()
         mock_device.id = "dev://3"
         mock_device.name = "Bad Battery Device"
-        mock_device.properties = {BATTERY_PKEY: "not-a-number"}
+        mock_device.properties = {BATTERY_PKEY: "not-a-number", IS_CONNECTED_PKEY: True}
 
         mock_find = AsyncMock(return_value=[mock_device])
         mocker.patch(
@@ -80,6 +81,23 @@ class TestWinrtEnumerate:
         result = asyncio.run(winrt_enumerate_bt())
 
         assert result[0]["battery"] is None
+
+    def test_disconnected_device_filtered(self, mocker):
+        """Device with IS_CONNECTED_PKEY=False is excluded from results."""
+        mock_device = MagicMock()
+        mock_device.id = "dev://off"
+        mock_device.name = "Offline Device"
+        mock_device.properties = {BATTERY_PKEY: None, IS_CONNECTED_PKEY: False}
+
+        mock_find = AsyncMock(return_value=[mock_device])
+        mocker.patch(
+            "monitor.bt_backend.DeviceInformation.find_all_async_aqs_filter_and_additional_properties",
+            mock_find,
+        )
+
+        result = asyncio.run(winrt_enumerate_bt())
+
+        assert result == []
 
 
 # ---------------------------------------------------------------------------

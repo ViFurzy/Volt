@@ -19,7 +19,6 @@ import queue
 import threading
 from collections import deque
 
-import hid
 from hidpp.receiver import (
     DEVICE_IDX,
     find_receiver,
@@ -126,6 +125,24 @@ class MonitorService:
         """
         return asyncio.run_coroutine_threadsafe(self._run_bt_scan(), self._loop)
 
+    def add_bt_device(self, entry: dict) -> None:
+        """Thread-safe: register a BT device for polling after user adds it to monitoring."""
+        def _do() -> None:
+            bt_id = entry.get("id")
+            if bt_id and bt_id not in self._bt_devices:
+                self._bt_devices[bt_id] = BtDeviceInfo(
+                    bt_id=bt_id,
+                    name=entry.get("name", "Unknown"),
+                    battery=None,
+                    ble_address=entry.get("ble_address"),
+                    status=DeviceStatus.ONLINE,
+                )
+        self._loop.call_soon_threadsafe(_do)
+
+    def remove_bt_device(self, bt_id: str) -> None:
+        """Thread-safe: stop polling a BT device after user removes it from monitoring."""
+        self._loop.call_soon_threadsafe(lambda: self._bt_devices.pop(bt_id, None))
+
     # ------------------------------------------------------------------
     # Background thread entry point
     # ------------------------------------------------------------------
@@ -147,37 +164,14 @@ class MonitorService:
             await asyncio.sleep(self.poll_interval)
 
     async def _run_bt_scan(self) -> None:
-        """Run winrt_enumerate_bt() AND hid.enumerate() and merge into BtScanResultEvent (BT-03).
+        """Enumerate connected Bluetooth devices and put a BtScanResultEvent on the queue (BT-03).
 
-        Populates self._bt_devices with BtDeviceInfo entries for each WinRT BT device.
-        Puts a BtScanResultEvent on _ui_queue containing both BT and HID entries.
+        Only BT devices are included. HID devices are auto-discovered via the dongle
+        path in discover() and are not useful for BT battery monitoring.
+        Does NOT modify self._bt_devices — only add_bt_device() and discover() do that.
         """
-        # Tier 1: WinRT paired BT devices (classic BT + BLE)
         bt_devices = await bt_backend.winrt_enumerate_bt()
-        for d in bt_devices:
-            info = BtDeviceInfo(
-                bt_id=d["id"],
-                name=d["name"],
-                battery=d.get("battery"),
-                ble_address=d.get("ble_address"),
-                status=DeviceStatus.ONLINE,
-            )
-            self._bt_devices[d["id"]] = info
-
-        # Tier 2: Connected HID devices via hid.enumerate() (BT-03 requirement).
-        # product_string may be empty for BT HID devices on Windows; use it only when non-empty.
-        hid_entries = []
-        for info in hid.enumerate():
-            name = info.get("product_string") or info.get("manufacturer_string") or "HID Device"
-            hid_entries.append({
-                "id": info.get("path", b"").decode("utf-8", errors="replace"),
-                "name": name,
-                "battery": None,  # hid.enumerate() does not expose battery
-                "type": "hid",
-            })
-
-        all_devices = bt_devices + hid_entries
-        self._ui_queue.put(BtScanResultEvent(devices=all_devices))
+        self._ui_queue.put(BtScanResultEvent(devices=bt_devices))
 
     async def discover(self) -> None:
         """Enumerate receivers, open new ones, and immediately mark disappeared ones OFFLINE.
@@ -278,13 +272,15 @@ class MonitorService:
         for entry in cfg_devices:
             bt_id = entry.get("id")
             if bt_id and bt_id not in self._bt_devices:
-                self._bt_devices[bt_id] = BtDeviceInfo(
+                info = BtDeviceInfo(
                     bt_id=bt_id,
                     name=entry.get("name", "Unknown"),
                     battery=None,
                     ble_address=entry.get("ble_address"),
                     status=DeviceStatus.ONLINE,
                 )
+                self._bt_devices[bt_id] = info
+                self._ui_queue.put(info)  # create card immediately; poll will fill battery
 
     async def poll_once(self) -> None:
         """Read battery for all open devices and push snapshots to the queue.
