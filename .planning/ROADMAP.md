@@ -14,7 +14,7 @@
 - [x] **Phase 4: Qt UI — Window + Tray** - PySide6 main window, system tray icon, close-to-tray, winreg auto-start, settings persistence (completed 2026-06-02)
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
 - [x] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic *(complete 2026-06-04)*
-- [ ] **Phase 7: Bluetooth Device Discovery** - WinRT OS battery query + BLE GATT fallback, device scan UI, add/remove monitored devices
+- [x] **Phase 7: Bluetooth Device Discovery** - WinRT OS battery query + BLE GATT fallback, device scan UI, add/remove monitored devices *(complete 2026-06-05)*
 - [ ] **Phase 8: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
 
 ---
