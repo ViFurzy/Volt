@@ -19,6 +19,7 @@ import queue
 import threading
 from collections import deque
 
+import hid
 from hidpp.receiver import (
     DEVICE_IDX,
     find_receiver,
@@ -28,8 +29,10 @@ from hidpp.features import voltage_to_percent
 from steelseries.driver import SS_DEVICE_IDX, find_dongle, open_dongle, ss_battery_probe
 
 _VOLTAGE_WINDOW = 4  # readings to average (~4 min at 60s poll)
+import monitor.bt_backend as bt_backend
 from monitor.registry import DeviceRegistry
-from monitor.state import KNOWN_DEVICES, DEVICE_PROBES, DeviceState, DeviceStatus
+from monitor.state import KNOWN_DEVICES, DEVICE_PROBES, DeviceState, DeviceStatus, BtDeviceInfo, BtScanResultEvent
+from ui.settings_manager import load_config
 
 
 class MonitorService:
@@ -65,6 +68,9 @@ class MonitorService:
         self._open: dict[tuple[int, int, int], object] = {}
         # Rolling voltage history for smoothing (keyed same as _open).
         self._voltage_history: dict[tuple[int, int, int], deque] = {}
+        # Discovered BT devices keyed by bt_id str.
+        # Accessed exclusively on the bg asyncio thread.
+        self._bt_devices: dict[str, BtDeviceInfo] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -112,6 +118,14 @@ class MonitorService:
         """
         return asyncio.run_coroutine_threadsafe(self.discover(), self._loop)
 
+    def scan_bt_devices(self) -> concurrent.futures.Future:
+        """Thread-safe entry point for the Devices page scan button (BT-03).
+
+        Schedules _run_bt_scan() on the bg loop; returns the Future so the caller
+        can attach a done callback. Result arrives via _ui_queue as BtScanResultEvent.
+        """
+        return asyncio.run_coroutine_threadsafe(self._run_bt_scan(), self._loop)
+
     # ------------------------------------------------------------------
     # Background thread entry point
     # ------------------------------------------------------------------
@@ -131,6 +145,39 @@ class MonitorService:
         while True:
             await self.poll_once()
             await asyncio.sleep(self.poll_interval)
+
+    async def _run_bt_scan(self) -> None:
+        """Run winrt_enumerate_bt() AND hid.enumerate() and merge into BtScanResultEvent (BT-03).
+
+        Populates self._bt_devices with BtDeviceInfo entries for each WinRT BT device.
+        Puts a BtScanResultEvent on _ui_queue containing both BT and HID entries.
+        """
+        # Tier 1: WinRT paired BT devices (classic BT + BLE)
+        bt_devices = await bt_backend.winrt_enumerate_bt()
+        for d in bt_devices:
+            info = BtDeviceInfo(
+                bt_id=d["id"],
+                name=d["name"],
+                battery=d.get("battery"),
+                ble_address=d.get("ble_address"),
+                status=DeviceStatus.ONLINE,
+            )
+            self._bt_devices[d["id"]] = info
+
+        # Tier 2: Connected HID devices via hid.enumerate() (BT-03 requirement).
+        # product_string may be empty for BT HID devices on Windows; use it only when non-empty.
+        hid_entries = []
+        for info in hid.enumerate():
+            name = info.get("product_string") or info.get("manufacturer_string") or "HID Device"
+            hid_entries.append({
+                "id": info.get("path", b"").decode("utf-8", errors="replace"),
+                "name": name,
+                "battery": None,  # hid.enumerate() does not expose battery
+                "type": "hid",
+            })
+
+        all_devices = bt_devices + hid_entries
+        self._ui_queue.put(BtScanResultEvent(devices=all_devices))
 
     async def discover(self) -> None:
         """Enumerate receivers, open new ones, and immediately mark disappeared ones OFFLINE.
@@ -225,6 +272,20 @@ class MonitorService:
             self._registry.upsert(state)
             self._ui_queue.put(state)
 
+        # Load persisted BT devices from config and register them for polling (BT-04).
+        # These don't get opened like HID devices; they are polled via resolve_battery().
+        cfg_devices = load_config().get("monitored_devices", [])
+        for entry in cfg_devices:
+            bt_id = entry.get("id")
+            if bt_id and bt_id not in self._bt_devices:
+                self._bt_devices[bt_id] = BtDeviceInfo(
+                    bt_id=bt_id,
+                    name=entry.get("name", "Unknown"),
+                    battery=None,
+                    ble_address=entry.get("ble_address"),
+                    status=DeviceStatus.ONLINE,
+                )
+
     async def poll_once(self) -> None:
         """Read battery for all open devices and push snapshots to the queue.
 
@@ -297,3 +358,21 @@ class MonitorService:
                 )
                 self._registry.upsert(state)
                 self._ui_queue.put(state)
+
+        # BT device battery refresh (BT-04): re-run resolve_battery() for each tracked BT device.
+        # Pass bt_info.battery (the WinRT cached value from the last scan) as the "battery" key so
+        # that resolve_battery() tier (a) can short-circuit when WinRT already provided a value.
+        # bt_info.battery is None when no scan has occurred yet (device just started), in which case
+        # tier (a) correctly falls through to tier (b) GATT.
+        for bt_id, bt_info in list(self._bt_devices.items()):
+            device_info = {"battery": bt_info.battery, "ble_address": bt_info.ble_address}
+            battery = await bt_backend.resolve_battery(device_info)
+            updated = BtDeviceInfo(
+                bt_id=bt_id,
+                name=bt_info.name,
+                battery=battery,
+                ble_address=bt_info.ble_address,
+                status=DeviceStatus.ONLINE,
+            )
+            self._bt_devices[bt_id] = updated
+            self._ui_queue.put(updated)
