@@ -6,3 +6,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+CLAUDE.md
+HANDOVER.md
+PeriphWatcher.spec
+=3.9
