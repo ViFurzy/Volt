@@ -10,3 +10,11 @@ CLAUDE.md
 HANDOVER.md
 PeriphWatcher.spec
 =3.9
+.planning/
+Volt.spec
+src/hid_poc.py
+src/query_battery.py
+src/run_monitor.py
+src/threading_stub.py
+scripts/probe_bt_devices.py
+
