@@ -6,7 +6,7 @@ from hidpp.receiver import find_receiver, open_receiver, discover_device_index
 from hidpp.features import battery_probe_chain
 
 """
-Phase 2 standalone integration script for PeriphWatcher.
+Phase 2 standalone integration script for Volt.
 
 Opens the LIGHTSPEED receiver (usage_page=0xFF43), discovers the device index,
 probes the G Pro X Wireless battery via the G-series 0x06/0x0D command, and

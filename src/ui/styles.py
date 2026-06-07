@@ -69,7 +69,13 @@ QPushButton#deviceSubItem {
     font-size: 12px;
     border-radius: 0px;
 }
-QPushButton#deviceSubItem:hover {
+QPushButton#deviceSubItem:checked {
+    background-color: #282366;
+    color: #7B9FFF;
+    border-left: 3px solid #7B9FFF;
+    font-weight: bold;
+}
+QPushButton#deviceSubItem:hover:!checked {
     color: #AAAACC;
     background-color: #22222e;
 }
@@ -152,4 +158,31 @@ QMenu {
 QMenu::item { padding: 6px 20px; }
 QMenu::item:selected { background-color: #282366; }
 QMenu::separator { height: 1px; background-color: #2a2a38; margin: 4px 0; }
+
+/* ── Devices page panels ─────────────────────────────────── */
+#devicePanel {
+    background-color: #202026;
+    border: 1px solid #25252f;
+    border-radius: 8px;
+}
+
+QListWidget {
+    background-color: #1a1a1f;
+    border: 1px solid #25252f;
+    border-radius: 4px;
+    color: #CCCCDD;
+    font-size: 12px;
+    outline: none;
+}
+QListWidget::item {
+    padding: 8px 12px;
+    border-radius: 3px;
+}
+QListWidget::item:selected {
+    background-color: #282366;
+    color: #7B9FFF;
+}
+QListWidget::item:hover:!selected {
+    background-color: #22222e;
+}
 """

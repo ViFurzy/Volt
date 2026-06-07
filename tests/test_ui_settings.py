@@ -30,6 +30,8 @@ def test_load_config_returns_defaults_when_file_absent(tmp_path, monkeypatch):
         "close_behavior": None,
         "cooldown_hours": 4,
         "monitored_devices": [],
+        "custom_hid_devices": [],
+        "ignored_devices": [],
     }
 
 
@@ -48,6 +50,8 @@ def test_load_config_returns_defaults_on_malformed_json(tmp_path, monkeypatch):
         "close_behavior": None,
         "cooldown_hours": 4,
         "monitored_devices": [],
+        "custom_hid_devices": [],
+        "ignored_devices": [],
     }
 
 
@@ -66,6 +70,8 @@ def test_save_and_load_config_roundtrip(tmp_path, monkeypatch):
         "close_behavior": None,
         "cooldown_hours": 4,
         "monitored_devices": [],
+        "custom_hid_devices": [],
+        "ignored_devices": [],
     }
 
 
@@ -96,6 +102,31 @@ def test_load_config_merges_unknown_keys(tmp_path, monkeypatch):
     result = load_config()
     assert result["launch_at_startup"] is True
     assert result["devices"] == {"custom": True}
+
+
+def test_save_config_increments_generation(tmp_path, monkeypatch):
+    """save_config increments _config_generation so caches know to rebuild."""
+    import ui.settings_manager as sm
+    monkeypatch.setattr(sm, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(sm, "CONFIG_FILE", tmp_path / "config.json")
+
+    before = sm.get_config_generation()
+    save_config({"launch_at_startup": False})
+    assert sm.get_config_generation() == before + 1
+    save_config({"launch_at_startup": True})
+    assert sm.get_config_generation() == before + 2
+
+
+def test_get_config_generation_is_stable_without_save(tmp_path, monkeypatch):
+    """get_config_generation does not change between saves."""
+    import ui.settings_manager as sm
+    monkeypatch.setattr(sm, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(sm, "CONFIG_FILE", tmp_path / "config.json")
+
+    gen1 = sm.get_config_generation()
+    _ = load_config()
+    gen2 = sm.get_config_generation()
+    assert gen1 == gen2
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +181,7 @@ def test_set_startup_enabled_calls_setvalueex(mocker):
     )
     mock_set.assert_called_once()
     args = mock_set.call_args[0]
-    assert args[1] == "PeriphWatcher"
+    assert args[1] == "Volt"
     assert args[3] == winreg.REG_SZ
     # Value must start with a double-quoted exe path
     # Dev mode: '"python.exe" -m src'; packaged: '"app.exe"'

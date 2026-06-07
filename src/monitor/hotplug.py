@@ -1,5 +1,5 @@
 """
-HotPlugWatcher — Win32 WM_DEVICECHANGE listener for PeriphWatcher.
+HotPlugWatcher — Win32 WM_DEVICECHANGE listener for Volt.
 
 Creates a hidden QWidget solely to own a Win32 HWND for RegisterDeviceNotificationW.
 Intercepts WM_DEVICECHANGE / DBT_DEVNODES_CHANGED on the Qt main thread and debounces

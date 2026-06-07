@@ -1,5 +1,5 @@
 """
-monitor — Phase 3 background service package for PeriphWatcher.
+monitor — Phase 3 background service package for Volt.
 
 Provides DeviceState, DeviceStatus, KNOWN_DEVICES (state.py), DeviceRegistry
 (registry.py), and the MonitorService polling loop (service.py). Architecture

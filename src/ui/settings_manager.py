@@ -1,7 +1,7 @@
-"""Settings persistence and startup registration for PeriphWatcher.
+"""Settings persistence and startup registration for Volt.
 
 Responsibilities:
-- JSON config at %APPDATA%\\PeriphWatcher\\config.json (SYS-02)
+- JSON config at %APPDATA%\\Volt\\config.json (SYS-02)
 - HKCU Run key startup registration via winreg (SYS-01)
 - Battery threshold colour mapping (D-01)
 
@@ -13,11 +13,14 @@ import sys
 import winreg
 from pathlib import Path
 
+# Incremented on every save_config() so consumers can cache without re-reading disk.
+_config_generation: int = 0
+
 # ---------------------------------------------------------------------------
 # Config constants
 # ---------------------------------------------------------------------------
 
-CONFIG_DIR: Path = Path(os.environ["APPDATA"]) / "PeriphWatcher"
+CONFIG_DIR: Path = Path(os.environ["APPDATA"]) / "Volt"
 CONFIG_FILE: Path = CONFIG_DIR / "config.json"
 
 _DEFAULTS: dict = {
@@ -26,6 +29,8 @@ _DEFAULTS: dict = {
     "close_behavior": None,
     "cooldown_hours": 4,
     "monitored_devices": [],  # list[dict] with keys: id, name, type, ble_address
+    "custom_hid_devices": [],  # list[dict] with keys: vid, pid, name, driver (e.g. "logitech" or "steelseries")
+    "ignored_devices": [],     # list[str] of ignored device IDs (e.g. "hid:1038:1852")
 }
 
 # ---------------------------------------------------------------------------
@@ -33,7 +38,7 @@ _DEFAULTS: dict = {
 # ---------------------------------------------------------------------------
 
 RUN_KEY: str = r"Software\Microsoft\Windows\CurrentVersion\Run"
-APP_NAME: str = "PeriphWatcher"
+APP_NAME: str = "Volt"
 
 
 # ---------------------------------------------------------------------------
@@ -60,9 +65,20 @@ def load_config() -> dict:
 
 def save_config(config: dict) -> None:
     """Persist config to disk, creating the directory if needed."""
+    global _config_generation
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with CONFIG_FILE.open("w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
+    _config_generation += 1
+
+
+def get_config_generation() -> int:
+    """Return the current config write generation counter.
+
+    Incremented on every save_config() call.  Consumers can cache expensive
+    config-derived data and re-build only when this value changes.
+    """
+    return _config_generation
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +101,35 @@ def battery_color(percent: int | None) -> str:
     if percent <= 45:
         return "#E5A300"  # warning
     return "#4FC3F7"      # normal
+
+
+def get_device_battery_color(
+    percent: int | None,
+    threshold: int | None = None,
+    charging: bool = False,
+    offline: bool = False,
+) -> str:
+    """Return color for device battery based on charging, offline state, and custom warning threshold.
+
+    Colors per handover:
+      - Battery good: #4CAF50
+      - Warning: #F0BB66
+      - Critical: #EE6800
+      - Offline/unknown: #555566
+      - Charging: #4FC3F7
+    """
+    if offline or percent is None:
+        return "#555566"
+    if charging:
+        return "#4FC3F7"
+    if percent <= 8:
+        return "#EE6800"
+
+    limit = 15 if threshold is None else threshold
+    if percent <= limit:
+        return "#F0BB66"
+    return "#4CAF50"
+
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +156,7 @@ def _get_exe_path() -> str:
 
 
 def set_startup(enabled: bool) -> None:
-    """Write or remove the HKCU Run key entry for PeriphWatcher.
+    """Write or remove the HKCU Run key entry for Volt.
 
     Writing to HKCU (current user) requires no admin rights.
     set_startup(False) is idempotent — swallows FileNotFoundError if the value
@@ -140,7 +185,7 @@ def set_startup(enabled: bool) -> None:
 
 
 def is_startup_enabled() -> bool:
-    """Return True if the HKCU Run key entry for PeriphWatcher exists."""
+    """Return True if the HKCU Run key entry for Volt exists."""
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
             winreg.QueryValueEx(key, APP_NAME)

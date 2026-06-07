@@ -146,3 +146,124 @@ def test_raw_21_gives_100_percent(mock_hid):
     mock_hid.read.side_effect = [[], [], [], [0xD2, 0x15] + [0x00] * 62]
     result = ss_battery_probe(mock_hid, 0x00)
     assert result.percent == 100
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Database Scanning and Headset Support Tests
+# ---------------------------------------------------------------------------
+
+from drivers.steelseries import SteelSeriesDriver, load_devices_from_db
+
+def test_supported_devices_loads_from_mock_db():
+    # Clear cache
+    SteelSeriesDriver._cached_supported_devices = None
+
+    with patch("drivers.steelseries.get_steelseries_db_path", return_value="dummy_path.db"), \
+         patch("shutil.copy2"), \
+         patch("os.path.exists", return_value=True), \
+         patch("os.remove"), \
+         patch("sqlite3.connect") as mock_connect:
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_connect.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+
+        # Mock rows: (product_id, connected_product_id, full_name, name)
+        # 0x10382202 is (0x1038, 0x2202) -> Arctis Nova 7
+        mock_cursor.fetchall.return_value = [
+            (0x10382202, 0x10382202, "Arctis Nova 7", "Arctis Nova 7"),
+        ]
+
+        driver = SteelSeriesDriver()
+        devs = driver.supported_devices
+
+        assert (0x1038, 0x2202) in devs
+        assert devs[(0x1038, 0x2202)] == "Arctis Nova 7"
+        assert (0x1038, 0x1852) in devs # Aerox 5 Wireless baseline is still present
+
+
+def test_probe_battery_nova_pro_wireless():
+    driver = SteelSeriesDriver()
+    # Nova Pro Wireless PID is 0x12E0
+    handle = {"path": b"/dev/hid1", "product_id": 0x12E0}
+
+    with patch("drivers.steelseries.open_dongle") as mock_open:
+        mock_dev = MagicMock()
+        mock_open.return_value = mock_dev
+
+        # Warmup reads (3 empty), then response starting with 0xb0 (176)
+        # response[6] is battery raw (e.g. 4 -> 50%)
+        # response[15] is status (0x02 -> charging)
+        response = [176] + [0]*5 + [4] + [0]*8 + [0x02] + [0]*48
+        mock_dev.read.side_effect = [[], [], [], response]
+
+        res = driver.probe_battery(handle, 0)
+        assert res is not None
+        assert res.percent == 50
+        assert res.charging is True
+        assert res.feature_used == "0x06,0xb0"
+
+
+def test_probe_battery_nova_5():
+    driver = SteelSeriesDriver()
+    # Nova 5 PID is 0x2232
+    handle = {"path": b"/dev/hid1", "product_id": 0x2232}
+
+    with patch("drivers.steelseries.open_dongle") as mock_open:
+        mock_dev = MagicMock()
+        mock_open.return_value = mock_dev
+
+        # Warmup reads, response starting with 0xb0 (176)
+        # response[1] is status (0x01 -> online/charging? wait, status online is not 0x02. charging is resp[4]==1)
+        # response[3] is level (e.g. 75%)
+        # response[4] is charging (0x01 -> True)
+        response = [176, 0x01, 0, 75, 0x01] + [0]*59
+        mock_dev.read.side_effect = [[], [], [], response]
+
+        res = driver.probe_battery(handle, 0)
+        assert res is not None
+        assert res.percent == 75
+        assert res.charging is True
+        assert res.feature_used == "0x00,0xb0"
+
+
+def test_probe_battery_nova_7():
+    driver = SteelSeriesDriver()
+    # Nova 7 PID is 0x2202
+    handle = {"path": b"/dev/hid1", "product_id": 0x2202}
+
+    with patch("drivers.steelseries.open_dongle") as mock_open:
+        mock_dev = MagicMock()
+        mock_open.return_value = mock_dev
+
+        # Warmup reads, response starting with 0xb0 (176)
+        # response[2] is level (e.g. 2 -> 2*25 = 50% for discrete)
+        # response[3] is status (e.g. 0x01 -> online, charging=True)
+        response = [176, 0, 2, 0x01] + [0]*60
+        mock_dev.read.side_effect = [[], [], [], response]
+
+        res = driver.probe_battery(handle, 0)
+        assert res is not None
+        assert res.percent == 50
+        assert res.charging is True
+        assert res.feature_used == "0x00,0xb0"
+
+
+def test_probe_battery_headset_offline():
+    driver = SteelSeriesDriver()
+    # Nova 7 PID is 0x2202
+    handle = {"path": b"/dev/hid1", "product_id": 0x2202}
+
+    with patch("drivers.steelseries.open_dongle") as mock_open:
+        mock_dev = MagicMock()
+        mock_open.return_value = mock_dev
+
+        # response starting with 0xb0
+        # response[3] is status (0x00 -> offline)
+        response = [176, 0, 2, 0x00] + [0]*60
+        mock_dev.read.side_effect = [[], [], [], response]
+
+        res = driver.probe_battery(handle, 0)
+        assert res is None  # Offline returns None
+

@@ -5,6 +5,7 @@ Strategy:
   - Instantiate DevicesPage and call methods directly.
   - pytest-qt's qapp fixture provides the QApplication singleton.
 """
+import json
 import pytest
 from unittest.mock import MagicMock
 from PySide6.QtWidgets import QWidget, QListWidgetItem
@@ -30,7 +31,12 @@ class TestDevicesPageConstruction:
     def test_has_scan_results_list(self, qapp):
         from ui.devices_page import DevicesPage
         page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
-        assert page._scan_list is not None  # QListWidget
+        assert page._scan_list is not None
+
+    def test_has_monitored_list(self, qapp):
+        from ui.devices_page import DevicesPage
+        page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
+        assert page._monitored_list is not None
 
 
 class TestDevicesPageScanResults:
@@ -46,21 +52,33 @@ class TestDevicesPageScanResults:
         assert page._scan_list.count() == 3
         assert "Stadia Controller" in page._scan_list.item(0).text()
         assert "82%" in page._scan_list.item(0).text()
-        assert "unknown" in page._scan_list.item(1).text().lower()
+        assert "N/A" in page._scan_list.item(1).text()
         assert "HID" in page._scan_list.item(2).text()
+
+    def test_scan_result_skips_already_monitored(self, qapp, monkeypatch):
+        """Devices already in monitored_ids are not shown in the scan list."""
+        from ui.devices_page import DevicesPage
+        monkeypatch.setattr(
+            "ui.devices_page.load_config",
+            lambda: {"monitored_devices": [{"id": "dev://1", "name": "X", "type": "bt", "ble_address": None}]},
+        )
+        monkeypatch.setattr("ui.devices_page.save_config", lambda cfg: None)
+        page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
+        page.on_scan_result([
+            {"id": "dev://1", "name": "Stadia", "battery": None, "type": "bt"},
+            {"id": "dev://2", "name": "Other", "battery": None, "type": "bt"},
+        ])
+        assert page._scan_list.count() == 1
+        assert "Other" in page._scan_list.item(0).text()
 
 
 class TestDevicesPageAddRemove:
     def test_add_device_saves_to_config(self, qapp, tmp_path, monkeypatch):
         from ui.devices_page import DevicesPage
-        from ui.settings_manager import load_config, save_config
 
-        # Use a temporary config file
-        import json
         config_file = tmp_path / "config.json"
         config_file.write_text(json.dumps({"monitored_devices": []}))
 
-        # Monkeypatch load_config and save_config to use tmp file
         def _load():
             with open(str(config_file)) as f:
                 return json.load(f)
@@ -73,27 +91,42 @@ class TestDevicesPageAddRemove:
         monkeypatch.setattr("ui.devices_page.save_config", _save)
 
         page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
-        page.on_scan_result([{"id": "dev://1", "name": "Stadia", "battery": 75, "type": "bt", "ble_address": None}])
-        page._scan_list.setCurrentRow(0)
-        page._on_add_clicked()
+        entry = {"id": "dev://1", "name": "Stadia", "battery": 75, "type": "bt", "ble_address": None}
+        page._on_add_device(entry)
 
         cfg = _load()
-        monitored = cfg.get("monitored_devices", [])
-        assert any(d["id"] == "dev://1" for d in monitored)
+        assert any(d["id"] == "dev://1" for d in cfg.get("monitored_devices", []))
 
-    def test_remove_triggers_remove_callback(self, qapp):
+    def test_add_device_appears_in_monitored_list(self, qapp, monkeypatch):
         from ui.devices_page import DevicesPage
+        monkeypatch.setattr("ui.devices_page.load_config", lambda: {"monitored_devices": []})
+        monkeypatch.setattr("ui.devices_page.save_config", lambda cfg: None)
+        page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
+        entry = {"id": "dev://1", "name": "Stadia", "type": "bt", "ble_address": None}
+        page._on_add_device(entry)
+        assert page._monitored_list.count() == 1
+        assert "Stadia" in page._monitored_list.item(0).text()
+
+    def test_remove_device_triggers_callback(self, qapp, monkeypatch):
+        from ui.devices_page import DevicesPage
+        monkeypatch.setattr("ui.devices_page.load_config", lambda: {"monitored_devices": []})
+        monkeypatch.setattr("ui.devices_page.save_config", lambda cfg: None)
         callback = MagicMock()
         page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=callback)
-
-        # Pre-populate monitored list with one entry
         entry = {"id": "dev://1", "name": "Stadia", "type": "bt", "ble_address": None}
-        item = QListWidgetItem("Stadia  |  BT")
-        item.setData(Qt.ItemDataRole.UserRole, entry)
-        page._monitored_list.addItem(item)
-        page._monitored_list.setCurrentRow(0)
-        page._on_remove_clicked()
+        page._monitored_ids.add("dev://1")
+        page._on_remove_device(entry)
         callback.assert_called_once_with("dev://1")
+
+    def test_remove_device_updates_monitored_ids(self, qapp, monkeypatch):
+        from ui.devices_page import DevicesPage
+        monkeypatch.setattr("ui.devices_page.load_config", lambda: {"monitored_devices": []})
+        monkeypatch.setattr("ui.devices_page.save_config", lambda cfg: None)
+        page = DevicesPage(service=MagicMock(), loop=MagicMock(), remove_card_callback=None)
+        page._monitored_ids.add("dev://1")
+        entry = {"id": "dev://1", "name": "Stadia", "type": "bt", "ble_address": None}
+        page._on_remove_device(entry)
+        assert "dev://1" not in page._monitored_ids
 
 
 class TestMainWindowBt:

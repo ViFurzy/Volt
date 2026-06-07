@@ -122,12 +122,11 @@ def test_cooldown_resets_on_offline():
 
         mgr = NotificationManager()
         config = {"thresholds": {}}
-        key = (0x046D, 0x0ABA, 0xFF)
 
         # First call — fires and plants cooldown entry
         mgr.check(_make_state(percent=10, status=DeviceStatus.ONLINE), config)
-        assert key in mgr._last_notified
+        assert "hid:046D:0ABA" in mgr._last_notified
 
-        # OFFLINE call — should clear the cooldown entry
+        # OFFLINE state clears it
         mgr.check(_make_state(percent=None, status=DeviceStatus.OFFLINE), config)
-        assert key not in mgr._last_notified
+        assert "hid:046D:0ABA" not in mgr._last_notified

@@ -1,5 +1,5 @@
 """
-Thread-safe DeviceState store for PeriphWatcher.
+Thread-safe DeviceState store for Volt.
 
 DeviceRegistry is shared between the asyncio background thread (writes via upsert)
 and the Qt main thread (reads via get/all). Every method acquires a threading.Lock

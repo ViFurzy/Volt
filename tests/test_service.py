@@ -55,6 +55,20 @@ UNKNOWN_INTERFACE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def mock_load_config(mocker):
+    mocker.patch("monitor.service.save_config")
+    return mocker.patch("monitor.service.load_config", return_value={
+        "launch_at_startup": False,
+        "thresholds": {},
+        "close_behavior": None,
+        "cooldown_hours": 4,
+        "monitored_devices": [],
+        "custom_hid_devices": [],
+        "ignored_devices": [],
+    })
+
+
 def make_service(ui_queue=None, registry=None):
     """Create a MonitorService with real queue/registry (no bg thread started)."""
     if ui_queue is None:
@@ -76,9 +90,12 @@ class TestDiscover:
         service = make_service(ui_queue, registry)
 
         mock_handle = mocker.MagicMock()
-        mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
-        mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [GPRO_INTERFACE]
+        mock_driver.dev_idx = DEVICE_IDX
+        mock_driver.open_device.return_value = mock_handle
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.discover())
 
@@ -97,9 +114,12 @@ class TestDiscover:
         service = make_service(ui_queue)
 
         mock_handle = mocker.MagicMock()
-        mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
-        mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [GPRO_INTERFACE]
+        mock_driver.dev_idx = DEVICE_IDX
+        mock_driver.open_device.return_value = mock_handle
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.discover())
 
@@ -114,9 +134,13 @@ class TestDiscover:
         registry = DeviceRegistry()
         service = make_service(ui_queue, registry)
 
-        mocker.patch("monitor.service.find_receiver", return_value=[UNKNOWN_INTERFACE])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
-        mock_open = mocker.patch("monitor.service.open_receiver")
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [UNKNOWN_INTERFACE]
+        mock_driver.dev_idx = DEVICE_IDX
+        mock_open = mock_driver.open_device
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
+        mocker.patch("monitor.service.load_config", return_value={"monitored_devices": []})
 
         asyncio.run(service.discover())
 
@@ -130,9 +154,13 @@ class TestDiscover:
         service = make_service()
 
         mock_handle = mocker.MagicMock()
-        mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
-        mock_open = mocker.patch("monitor.service.open_receiver", return_value=mock_handle)
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [GPRO_INTERFACE]
+        mock_driver.dev_idx = DEVICE_IDX
+        mock_open = mock_driver.open_device
+        mock_open.return_value = mock_handle
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.discover())  # first call opens
         asyncio.run(service.discover())  # second call should not reopen
@@ -145,9 +173,13 @@ class TestDiscover:
         registry = DeviceRegistry()
         service = make_service(ui_queue, registry)
 
-        mocker.patch("monitor.service.find_receiver", return_value=[GPRO_INTERFACE])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
-        mocker.patch("monitor.service.open_receiver", side_effect=OSError("access denied"))
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [GPRO_INTERFACE]
+        mock_driver.dev_idx = DEVICE_IDX
+        mock_driver.open_device.side_effect = OSError("access denied")
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
+        mocker.patch("monitor.service.load_config", return_value={"monitored_devices": []})
 
         asyncio.run(service.discover())
 
@@ -176,8 +208,7 @@ class TestDiscover:
             pass
 
         # Both Logitech and SteelSeries gone
-        mocker.patch("monitor.service.find_receiver", return_value=[])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
+        mocker.patch("monitor.service.get_all_drivers", return_value=[])
 
         asyncio.run(service.discover())
 
@@ -190,8 +221,12 @@ class TestDiscover:
         registry = DeviceRegistry()
         service = make_service(ui_queue, registry)
 
-        mocker.patch("monitor.service.find_receiver", return_value=[])
-        mocker.patch("monitor.service.find_dongle", return_value=[SS_INTERFACE])
+        mock_ss = mocker.MagicMock()
+        mock_ss.find_devices.return_value = [SS_INTERFACE]
+        mock_ss.dev_idx = SS_DEVICE_IDX
+        mock_ss.open_device.return_value = SS_INTERFACE
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_ss])
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_ss)
 
         asyncio.run(service.discover())
 
@@ -227,10 +262,9 @@ class TestPollOnce:
         """poll_once() with BatteryResult(75, False) upserts ONLINE, percent=75."""
         service, _, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch.dict(
-            "monitor.service.DEVICE_PROBES",
-            {(GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D")},
-        )
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.return_value = BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D")
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.poll_once())
 
@@ -247,10 +281,9 @@ class TestPollOnce:
         """poll_once() with BatteryResult(charging=True) yields status=CHARGING."""
         service, _, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch.dict(
-            "monitor.service.DEVICE_PROBES",
-            {(GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(percent=60, voltage_mv=3894, charging=True, feature_used="0x06/0x0D")},
-        )
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.return_value = BatteryResult(percent=60, voltage_mv=3894, charging=True, feature_used="0x06/0x0D")
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.poll_once())
 
@@ -269,10 +302,9 @@ class TestPollOnce:
         """
         service, mock_handle, ui_queue, registry = self._setup_with_open_device(mocker)
 
-        mocker.patch.dict(
-            "monitor.service.DEVICE_PROBES",
-            {(GPRO_VID, GPRO_PID): lambda h, i: None},
-        )
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.return_value = None
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.poll_once())
 
@@ -296,10 +328,9 @@ class TestPollOnce:
         mock_handle = mocker.MagicMock()
         service._open[GPRO_KEY] = mock_handle  # open but NOT in registry
 
-        mocker.patch.dict(
-            "monitor.service.DEVICE_PROBES",
-            {(GPRO_VID, GPRO_PID): lambda h, i: None},
-        )
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.return_value = None
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.poll_once())
 
@@ -315,7 +346,9 @@ class TestPollOnce:
         mock_probe = mocker.MagicMock(
             return_value=BatteryResult(percent=75, voltage_mv=3990, charging=False, feature_used="0x06/0x0D")
         )
-        mocker.patch.dict("monitor.service.DEVICE_PROBES", {(GPRO_VID, GPRO_PID): mock_probe})
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.side_effect = mock_probe
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
 
         asyncio.run(service.poll_once())
 
@@ -343,11 +376,9 @@ class TestPollOnce:
             [[], [], []]                          # 3 warmup reads → empty
             + [[0xD2, 0x05] + [0x00] * 62]       # battery response: raw=5 → pct=20
         )
-        mocker.patch("monitor.service.open_dongle", return_value=mock_fresh_handle)
-        mocker.patch.dict("monitor.service.DEVICE_PROBES", {
-            (GPRO_VID, GPRO_PID): lambda h, i: BatteryResult(75, 3990, False, "0x06/0x0D"),
-            (SS_VID, SS_PID): _ss_battery_probe,
-        })
+        mock_driver_ss = mocker.MagicMock()
+        mock_driver_ss.probe_battery.return_value = BatteryResult(percent=20, voltage_mv=0, charging=False, feature_used="0xD2")
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver_ss)
 
         asyncio.run(service.poll_once())
 
@@ -356,6 +387,31 @@ class TestPollOnce:
         assert ss_state.percent == 20
         # Voltage history must NOT have been updated for the SS key (no smoothing)
         assert SS_KEY not in service._voltage_history
+
+    def test_poll_once_respects_intervals(self, mocker):
+        """poll_once(force=False) respects the 3-second offline interval and the 60-second online interval."""
+        service, mock_handle, ui_queue, registry = self._setup_with_open_device(mocker)
+
+        mock_driver = mocker.MagicMock()
+        mock_driver.probe_battery.return_value = None  # returns offline
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
+
+        # Mock time.time()
+        start_time = 1000.0
+        mocker.patch("time.time", side_effect=[start_time, start_time + 1.0, start_time + 4.0])
+
+        # First poll runs because _last_poll_time is empty
+        asyncio.run(service.poll_once(force=False))
+        assert mock_driver.probe_battery.call_count == 1
+
+        # Second poll is 1s later, skipped because interval is 3s for offline
+        asyncio.run(service.poll_once(force=False))
+        assert mock_driver.probe_battery.call_count == 1
+
+        # Third poll is 4s later (total 4s difference >= 3s), runs again
+        asyncio.run(service.poll_once(force=False))
+        assert mock_driver.probe_battery.call_count == 2
+
 
 
 # ---------------------------------------------------------------------------
@@ -414,19 +470,24 @@ class TestBtDevices:
         assert isinstance(event, BtScanResultEvent)
         assert event.devices[0]["name"] == "Stadia"
 
-    def test_scan_bt_devices_excludes_hid_entries(self, mocker):
-        """_run_bt_scan() only includes BT devices — no hid.enumerate() results."""
+    def test_scan_bt_devices_includes_hid_entries(self, mocker):
+        """_run_bt_scan() includes both BT devices and connected/supported HID devices."""
         mocker.patch(
             "monitor.service.bt_backend.winrt_enumerate_bt",
             return_value=[{"id": "dev://bt1", "name": "Stadia", "battery": None, "type": "bt", "ble_address": None}],
         )
+        mock_driver = mocker.MagicMock()
+        mock_driver.find_devices.return_value = [{"vendor_id": 0x046D, "product_id": 0x0ABA}]
+        mocker.patch("monitor.service.get_all_drivers", return_value=[mock_driver])
+
         service = make_service()
 
         asyncio.run(service._run_bt_scan())
 
         event = service._ui_queue.get_nowait()
         assert isinstance(event, BtScanResultEvent)
-        assert all(d["type"] == "bt" for d in event.devices)
+        assert any(d["type"] == "bt" for d in event.devices)
+        assert any(d["type"] == "hid" for d in event.devices)
 
     def test_scan_bt_devices_does_not_store_in_bt_devices_dict(self, mocker):
         """_run_bt_scan() must NOT populate _bt_devices; only add_bt_device()/discover() do that."""
@@ -447,8 +508,7 @@ class TestBtDevices:
             return_value=60,
         )
         # Patch HID side so poll_once() doesn't try real HID
-        mocker.patch("monitor.service.find_receiver", return_value=[])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
+        mocker.patch("monitor.service.get_all_drivers", return_value=[])
         service = make_service()
         service._bt_devices["dev://1"] = BtDeviceInfo(
             bt_id="dev://1",
@@ -475,10 +535,112 @@ class TestBtDevices:
             },
         )
         mocker.patch("monitor.service.bt_backend.winrt_enumerate_bt", return_value=[])
-        mocker.patch("monitor.service.find_receiver", return_value=[])
-        mocker.patch("monitor.service.find_dongle", return_value=[])
+        mocker.patch("monitor.service.get_all_drivers", return_value=[])
         service = make_service()
 
         asyncio.run(service.discover())
 
         assert "dev://1" in service._bt_devices
+
+
+# ---------------------------------------------------------------------------
+# MonitorService.stop() — clean async shutdown (BUG-01)
+# ---------------------------------------------------------------------------
+
+class TestStopCleanShutdown:
+    def test_stop_with_no_tasks_does_not_raise(self):
+        """stop() on a never-started service (loop not running) must not raise.
+
+        This covers the case where the app is closed immediately after
+        construction, before start() is called.
+        """
+        service = make_service()
+        service.stop()  # must not raise — loop is not running, _poll_task is None
+
+    def test_stop_cancels_and_awaits_poll_tasks(self, mocker):
+        """stop() cancels _poll_task / _bt_poll_task and joins the bg thread cleanly.
+
+        We start the service (which schedules the tasks) then immediately stop it.
+        The bg thread must join within the timeout — confirming the loop was stopped
+        and no task was left in "pending" limbo.
+        """
+        mocker.patch("monitor.service.get_all_drivers", return_value=[])
+        mocker.patch(
+            "monitor.service.bt_backend.winrt_enumerate_bt", return_value=[]
+        )
+        mocker.patch(
+            "monitor.service.bt_backend.resolve_battery", return_value=None
+        )
+
+        service = make_service()
+        service.start()
+        # Give the bg loop a moment to schedule the poll tasks.
+        import time
+        time.sleep(0.15)
+
+        service.stop()
+
+        # After stop(), the bg thread must be dead (loop.stop() was called).
+        assert not service._thread.is_alive(), "bg thread still alive after stop()"
+
+    def test_stop_closes_open_handles(self, mocker):
+        """stop() calls close_device() for every handle in self._open."""
+        mock_driver = mocker.MagicMock()
+        mocker.patch("monitor.service.get_driver_for_device", return_value=mock_driver)
+        mocker.patch("monitor.service.get_all_drivers", return_value=[])
+        mocker.patch(
+            "monitor.service.bt_backend.winrt_enumerate_bt", return_value=[]
+        )
+        mocker.patch(
+            "monitor.service.bt_backend.resolve_battery", return_value=None
+        )
+
+        service = make_service()
+        service.start()  # bg loop must be running for run_coroutine_threadsafe to work
+
+        fake_handle = mocker.MagicMock()
+        service._open[(0x046D, 0x0ABA, 0xFF)] = fake_handle
+
+        service.stop()
+
+        mock_driver.close_device.assert_called_once_with(fake_handle)
+        assert service._open == {}
+
+
+# ---------------------------------------------------------------------------
+# get_known_devices() generation-aware cache (BUG-02)
+# ---------------------------------------------------------------------------
+
+class TestKnownDevicesCache:
+    def test_cache_is_reused_on_second_call(self, mocker):
+        """get_known_devices() returns the same dict object on consecutive calls
+        when no save_config() has been issued in between."""
+        import drivers as drv
+        # Force a fresh cache build.
+        drv._known_devices_cache = None
+        drv._known_devices_generation = -1
+
+        first = drv.get_known_devices()
+        second = drv.get_known_devices()
+        assert first is second, "Expected the same cached dict object"
+
+    def test_cache_rebuilds_after_save_config(self, tmp_path, monkeypatch):
+        """get_known_devices() rebuilds the dict after save_config() increments the generation."""
+        import ui.settings_manager as sm
+        import drivers as drv
+
+        monkeypatch.setattr(sm, "CONFIG_DIR", tmp_path)
+        monkeypatch.setattr(sm, "CONFIG_FILE", tmp_path / "config.json")
+
+        # Force a fresh cache build.
+        drv._known_devices_cache = None
+        drv._known_devices_generation = -1
+
+        first = drv.get_known_devices()
+
+        # Simulate a config write.
+        sm.save_config({"custom_hid_devices": [], "monitored_devices": []})
+
+        second = drv.get_known_devices()
+        # Must be a NEW dict object (rebuilt after generation bump).
+        assert first is not second, "Cache was not invalidated after save_config()"

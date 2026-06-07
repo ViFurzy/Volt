@@ -1,10 +1,10 @@
-"""TrayManager — QSystemTrayIcon lifecycle for PeriphWatcher.
+"""TrayManager — QSystemTrayIcon lifecycle for Volt.
 
 Pattern 1 from RESEARCH: icon + menu set BEFORE show() (Pitfall 3).
 DoubleClick on the tray icon restores the main window (D-07).
 """
 from PySide6.QtGui import QAction, QCursor
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from ui.icon import make_volt_icon
 
@@ -29,15 +29,20 @@ class TrayManager:
         self._tray.setIcon(make_volt_icon())
         self._tray.setToolTip("VOLT | POWER CENTER")
 
-        # Build context menu (D-07): Show | ---- | Quit
-        self._menu = QMenu()
-        show_action = QAction("Show")
-        show_action.triggered.connect(window.show_restore)
-        self._menu.addAction(show_action)
+        # Build context menu (D-07): Show the app | ---- | Quit
+        parent_widget = window if isinstance(window, QWidget) else None
+        self._menu = QMenu(parent=parent_widget)
+        
+        self._show_action = self._menu.addAction("Show the app")
+        self._show_action.triggered.connect(window.show_restore)
+
+        self._compact_action = self._menu.addAction("Compact mode")
+        self._compact_action.triggered.connect(window.enter_widget_mode)
+
         self._menu.addSeparator()
-        quit_action = QAction("Quit")
-        quit_action.triggered.connect(qapp.quit)
-        self._menu.addAction(quit_action)
+
+        self._quit_action = self._menu.addAction("Quit")
+        self._quit_action.triggered.connect(qapp.quit)
 
         self._tray.setContextMenu(self._menu)
         self._tray.activated.connect(self._on_activated)
@@ -51,6 +56,4 @@ class TrayManager:
         """Handle tray icon activation (D-07)."""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._window.show_restore()
-        elif reason == QSystemTrayIcon.ActivationReason.Context:
-            # setContextMenu() is unreliable on Windows — show manually at cursor.
-            self._menu.exec(QCursor.pos())
+

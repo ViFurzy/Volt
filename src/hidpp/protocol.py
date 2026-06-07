@@ -54,7 +54,8 @@ def send_and_recv(
     if len(response) < min_len:
         return None
 
-    if response[2] == ERROR_SENTINEL:
+    if response[2] in (0x8F, ERROR_SENTINEL):
         raise HIDppError(response[5])
 
     return response
+

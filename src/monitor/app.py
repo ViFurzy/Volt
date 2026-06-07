@@ -44,7 +44,7 @@ class MonitorApp:
         consumer: Callable[[DeviceState], None],
         bt_consumer=None,
         scan_consumer=None,
-        poll_interval: float = 60.0,
+        poll_interval: float = 3.0,
         drain_ms: int = 500,
     ) -> None:
         self.ui_queue: queue.Queue = queue.Queue()

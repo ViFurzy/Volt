@@ -1,5 +1,5 @@
 """
-HID++ 2.0 protocol implementation for PeriphWatcher.
+HID++ 2.0 protocol implementation for Volt.
 
 Provides message construction, send/receive, feature discovery, and battery probe
 chain over the hidapi (usage_page=0xFF00) vendor-specific interface. All HID device

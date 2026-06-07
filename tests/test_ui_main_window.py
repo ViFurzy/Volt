@@ -153,16 +153,21 @@ class TestOnDeviceUpdateCreateOrUpdate:
         # Layout count must increase by 1 (card inserted before stretch)
         assert window.dashboard_layout.count() == initial_count + 1
 
-    def test_stretch_remains_last_after_card_insert(self, qapp):
-        """dashboard_layout stretch item must stay at the bottom after card insert."""
-        from ui.main_window import MainWindow
+    def test_all_items_are_cards_after_insert(self, qapp):
+        """FlowLayout has no trailing stretch — items are card widgets (DeviceCard or AddPlaceholder)."""
+        from ui.main_window import MainWindow, _AddPlaceholder
+        from ui.device_card import DeviceCard
         window = MainWindow()
         state = _make_state()
         window.on_device_update(state)
         count = window.dashboard_layout.count()
+        assert count >= 2  # 1 device card + 1 placeholder card
         last_item = window.dashboard_layout.itemAt(count - 1)
-        # The last item is the stretch spacer — it has no widget
-        assert last_item.widget() is None, "Stretch item must remain last in layout"
+        assert last_item.widget() is not None, "FlowLayout items must all be card widgets"
+        assert isinstance(last_item.widget(), _AddPlaceholder)
+        for idx in range(count - 1):
+            item = window.dashboard_layout.itemAt(idx)
+            assert isinstance(item.widget(), DeviceCard)
 
     def test_two_cards_both_in_layout(self, qapp):
         """After two distinct devices, both cards appear in dashboard_layout."""
@@ -175,3 +180,131 @@ class TestOnDeviceUpdateCreateOrUpdate:
         window.on_device_update(state_a)
         window.on_device_update(state_b)
         assert window.dashboard_layout.count() == initial_count + 2
+
+
+# ---------------------------------------------------------------------------
+# Compact Mode and Beside Mode Visibility Tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_window_config(tmp_path, monkeypatch):
+    """Mock settings path and save config."""
+    import ui.settings_manager as sm
+    from ui.settings_manager import save_config
+    monkeypatch.setattr(sm, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(sm, "CONFIG_FILE", tmp_path / "config.json")
+    save_config({
+        "widget_show_beside": False,
+        "widget_vertical_layout": False,
+    })
+
+
+
+def test_enter_widget_mode_hides_main_when_show_beside_false(qapp, mock_window_config, mocker):
+    """If widget_show_beside is False, enter_widget_mode hides MainWindow and shows widget."""
+    from ui.main_window import MainWindow
+    from ui.settings_manager import save_config
+    
+    save_config({"widget_show_beside": False})
+    window = MainWindow()
+    
+    # Mock window's explicit visibility state
+    mocker.patch.object(window, "hide")
+    mocker.patch.object(window._widget, "show")
+    
+    window.enter_widget_mode()
+    
+    window.hide.assert_called_once()
+    window._widget.show.assert_called_once()
+
+
+def test_enter_widget_mode_keeps_main_when_show_beside_true(qapp, mock_window_config, mocker):
+    """If widget_show_beside is True, enter_widget_mode does not hide MainWindow and shows widget."""
+    from ui.main_window import MainWindow
+    from ui.settings_manager import save_config
+    
+    save_config({"widget_show_beside": True})
+    window = MainWindow()
+    
+    mocker.patch.object(window, "hide")
+    mocker.patch.object(window._widget, "show")
+    
+    window.enter_widget_mode()
+    
+    window.hide.assert_not_called()
+    window._widget.show.assert_called_once()
+
+
+def test_exit_widget_mode_restores_main_if_hidden(qapp, mock_window_config, mocker):
+    """exit_widget_mode hides widget, and restores MainWindow if it was hidden."""
+    from ui.main_window import MainWindow
+    window = MainWindow()
+    
+    mocker.patch.object(window._widget, "hide")
+    mocker.patch.object(window, "isVisible", return_value=False)
+    mocker.patch.object(window, "show")
+    mocker.patch.object(window, "raise_")
+    mocker.patch.object(window, "activateWindow")
+    
+    window.exit_widget_mode()
+    
+    window._widget.hide.assert_called_once()
+    window.show.assert_called_once()
+    window.raise_.assert_called_once()
+    window.activateWindow.assert_called_once()
+
+
+def test_exit_widget_mode_does_not_call_show_if_already_visible(qapp, mock_window_config, mocker):
+    """exit_widget_mode hides widget, and does not call show on MainWindow if it was already visible."""
+    from ui.main_window import MainWindow
+    window = MainWindow()
+    
+    mocker.patch.object(window._widget, "hide")
+    mocker.patch.object(window, "isVisible", return_value=True)
+    mocker.patch.object(window, "show")
+    
+    window.exit_widget_mode()
+    
+    window._widget.hide.assert_called_once()
+    window.show.assert_not_called()
+
+
+def test_show_restore_exits_widget_mode_when_show_beside_false(qapp, mock_window_config, mocker):
+    """show_restore exits widget mode (restoring main, hiding widget) if widget is visible and show_beside is False."""
+    from ui.main_window import MainWindow
+    from ui.settings_manager import save_config
+    
+    save_config({"widget_show_beside": False})
+    window = MainWindow()
+    
+    mocker.patch.object(window._widget, "isVisible", return_value=True)
+    mocker.patch.object(window, "exit_widget_mode")
+    mocker.patch.object(window, "show")
+    
+    window.show_restore()
+    
+    window.exit_widget_mode.assert_called_once()
+    window.show.assert_not_called()
+
+
+def test_show_restore_shows_main_when_show_beside_true(qapp, mock_window_config, mocker):
+    """show_restore shows main window (leaving widget visible) if widget is visible and show_beside is True."""
+    from ui.main_window import MainWindow
+    from ui.settings_manager import save_config
+    
+    save_config({"widget_show_beside": True})
+    window = MainWindow()
+    
+    mocker.patch.object(window._widget, "isVisible", return_value=True)
+    mocker.patch.object(window, "exit_widget_mode")
+    mocker.patch.object(window, "show")
+    mocker.patch.object(window, "raise_")
+    mocker.patch.object(window, "activateWindow")
+    
+    window.show_restore()
+    
+    window.exit_widget_mode.assert_not_called()
+    window.show.assert_called_once()
+    window.raise_.assert_called_once()
+    window.activateWindow.assert_called_once()
+

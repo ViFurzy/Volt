@@ -1,4 +1,4 @@
-# Roadmap: PeriphWatcher
+# Roadmap: Volt
 
 **Milestone:** v1.0 — Windows peripheral battery monitor without manufacturer software
 **Granularity:** Fine
@@ -15,7 +15,7 @@
 - [ ] **Phase 5: SteelSeries HID Backend** - Proprietary 2.4GHz raw HID driver wired into MonitorService
 - [x] **Phase 6: Notifications** - Windows toast alerts, per-device thresholds, cooldown logic *(complete 2026-06-04)*
 - [x] **Phase 7: Bluetooth Device Discovery** - WinRT OS battery query + BLE GATT fallback, device scan UI, add/remove monitored devices *(complete 2026-06-05)*
-- [ ] **Phase 8: Packaging + Distribution** - PyInstaller single-exe, hidapi.dll bundling, clean-machine validation
+- [x] **Phase 8: Packaging + Distribution** - PyInstaller build, Inno Setup installer, and Auto-Updater *(complete 2026-06-07)*
 
 ---
 
@@ -219,7 +219,11 @@ Plans:
   3. The .exe runs on a clean Windows 11 VM with no Python or Logitech software installed and successfully reads battery from the LIGHTSPEED dongle
   4. sys.coinit_flags = 0 remains the first executable statement after PyInstaller entry-point wrapping (verified by inspecting the boot-time import order)
 
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] Implemented `scripts/build.py` (PyInstaller) and `scripts/installer.iss` (Inno Setup)
+- [x] Built Auto-Updater module fetching latest releases from GitHub (`ViFurzy/Volt`)
+- [x] Renamed application globally from "PeriphWatcher" to "Volt"
 
 ---
 
@@ -234,7 +238,7 @@ Plans:
 | 5. SteelSeries HID Backend | 0/3 | Not started | - |
 | 6. Notifications | 3/3 | Complete | 2026-06-04 |
 | 7. Bluetooth Device Discovery | 0/5 | Not started | - |
-| 8. Packaging + Distribution | 0/? | Not started | - |
+| 8. Packaging + Distribution | 1/1 | Complete | 2026-06-07 |
 
 ---
 
@@ -252,4 +256,4 @@ These constraints must hold across every phase. Violations are bugs, not trade-o
 
 ---
 *Created: 2026-06-01*
-*Last updated: 2026-06-05 — Phase 7 planned: 5 plans in 5 waves*
+*Last updated: 2026-06-07 — Phase 8 Packaging and Auto-Updater completed*

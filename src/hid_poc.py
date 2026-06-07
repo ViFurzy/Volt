@@ -1,5 +1,5 @@
 """
-HID enumeration and raw I/O proof-of-concept for the PeriphWatcher project.
+HID enumeration and raw I/O proof-of-concept for the Volt project.
 
 Enumerates all Logitech (VID=0x046D) HID interfaces, filters for the vendor-specific
 interface (usage_page=0xFF00), opens it exclusively via open_path(), and performs a

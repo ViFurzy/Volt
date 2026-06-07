@@ -14,7 +14,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from monitor.app import MonitorApp
-from monitor.state import DeviceState
+from monitor.state import DeviceState, BtDeviceInfo
 from ui.icon import make_volt_icon
 from ui.main_window import MainWindow
 from ui.notification_manager import NotificationManager
@@ -28,8 +28,20 @@ def _on_device_update(window: MainWindow, notif_manager: NotificationManager, st
     cfg = load_config()
     notif_manager.check(state, cfg)
 
+def _on_bt_device_update(window: MainWindow, notif_manager: NotificationManager, state: BtDeviceInfo) -> None:
+    window.on_bt_device_update(state)
+    cfg = load_config()
+    notif_manager.check(state, cfg)
+
 
 def main() -> None:
+    import ctypes
+    try:
+        myappid = 'vifurzy.volt.powercenter.0.4.0'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except AttributeError:
+        pass
+
     qapp = QApplication(sys.argv)
     qapp.setQuitOnLastWindowClosed(False)  # REQUIRED: keeps process alive when window hides (Pitfall 2)
     qapp.setStyleSheet(DARK_QSS)
@@ -51,7 +63,7 @@ def main() -> None:
         consumer=lambda s: None,  # placeholder, patched below
         bt_consumer=None,
         scan_consumer=None,
-        poll_interval=60.0,  # production polling interval
+        poll_interval=3.0,  # production polling interval
     )
 
     # Create MainWindow with service and loop from app_obj
@@ -63,7 +75,7 @@ def main() -> None:
 
     # Back-patch consumers now that window exists
     app_obj._consumer = lambda s: _on_device_update(window, notif_manager, s)
-    app_obj._bt_consumer = window.on_bt_device_update
+    app_obj._bt_consumer = lambda s: _on_bt_device_update(window, notif_manager, s)
     app_obj._scan_consumer = window.on_scan_result
 
     app_obj.start()

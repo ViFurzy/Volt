@@ -11,8 +11,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
-from hidpp.features import battery_probe_chain
-from steelseries.driver import ss_battery_probe
+from drivers import get_known_devices
 
 
 class DeviceStatus(enum.Enum):
@@ -75,19 +74,39 @@ class BtScanResultEvent:
     devices: list[dict]
 
 
-# Hardcoded VID/PID → human-readable name registry (D-04, D-05).
+class KnownDevicesDict(dict):
+    def _get_map(self) -> dict[tuple[int, int], str]:
+        return get_known_devices()
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._get_map()
+
+    def __getitem__(self, key: tuple[int, int]) -> str:
+        return self._get_map()[key]
+
+    def get(self, key: tuple[int, int], default: str | None = None) -> str | None:  # type: ignore[override]
+        return self._get_map().get(key, default)
+
+    def keys(self):
+        return self._get_map().keys()
+
+    def values(self):
+        return self._get_map().values()
+
+    def items(self):
+        return self._get_map().items()
+
+    def __len__(self) -> int:
+        return len(self._get_map())
+
+    def __repr__(self) -> str:
+        return repr(self._get_map())
+
+    def __bool__(self) -> bool:
+        return bool(self._get_map())
+
+
+# Hardcoded/Configured VID/PID → human-readable name registry (D-04, D-05).
 # device_name in DeviceState always comes from this lookup — never from
 # hid.enumerate()'s product_string (which can change across firmware updates).
-KNOWN_DEVICES: dict[tuple[int, int], str] = {
-    (0x046D, 0x0ABA): "G Pro X Wireless",
-    (0x1038, 0x1852): "Aerox 5 Wireless",
-}
-
-# Probe function registry: (vid, pid) → (device_or_info, dev_idx) → BatteryResult | None.
-# For Logitech, the first argument is an open hid.device handle.
-# For SteelSeries, the first argument is the info dict (open_dongle is called
-# per-poll inside poll_once — the dongle responds exactly once per device open).
-DEVICE_PROBES: dict[tuple[int, int], callable] = {
-    (0x046D, 0x0ABA): battery_probe_chain,
-    (0x1038, 0x1852): ss_battery_probe,
-}
+KNOWN_DEVICES: dict[tuple[int, int], str] = KnownDevicesDict()
