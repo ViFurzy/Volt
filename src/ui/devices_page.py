@@ -214,11 +214,11 @@ class DevicesPage(QWidget):
         self._add_monitored_item(normalized)
         cfg = load_config()
         
-        # Ensure it is removed from ignored_devices
+        # Ensure it is removed from ignored_devices (both parent and child IDs)
         ignored = cfg.get("ignored_devices", [])
-        if entry_id in ignored:
-            ignored = [i for i in ignored if i != entry_id]
-            cfg["ignored_devices"] = ignored
+        new_ignored = [i for i in ignored if not (i == entry_id or i.startswith(entry_id + ":"))]
+        if len(new_ignored) != len(ignored):
+            cfg["ignored_devices"] = new_ignored
             
         monitored = cfg.get("monitored_devices", [])
         if not any(d["id"] == entry_id for d in monitored):
@@ -231,6 +231,17 @@ class DevicesPage(QWidget):
                 self._service.add_monitored_device(normalized)
             else:
                 self._service.add_bt_device(normalized)
+
+    def refresh_monitored(self) -> None:
+        """Re-read config and repopulate the Currently Monitored list.
+
+        Called whenever the service auto-adds a new device to monitored_devices
+        (e.g. on first HID plug-in) so the list stays in sync with the dashboard.
+        """
+        self._monitored_list.clear()
+        self._monitored_ids.clear()
+        for entry in load_config().get("monitored_devices", []):
+            self._add_monitored_item(entry)
 
     def remove_monitored_device(self, device_id: str) -> None:
         """Remove a device from the monitored list by its ID (called from dashboard ⋮ menu)."""
@@ -256,8 +267,6 @@ class DevicesPage(QWidget):
                 cfg["ignored_devices"] = ignored
                 
         cfg["monitored_devices"] = [e for e in cfg.get("monitored_devices", []) if e["id"] != entry_id]
-        if "history" in cfg and entry_id in cfg["history"]:
-            del cfg["history"][entry_id]
         save_config(cfg)
         if self._remove_card_callback is not None:
             self._remove_card_callback(entry_id)

@@ -14,6 +14,7 @@ def main():
     args = [
         sys.executable,
         "-m", "PyInstaller",
+        "-y",
         "--name", "Volt",
         "--noconsole",
         "--windowed",

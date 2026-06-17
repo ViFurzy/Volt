@@ -1,6 +1,6 @@
 [Setup]
 AppName=Volt
-AppVersion=0.5.0
+AppVersion=0.5.1
 
 AppPublisher=Volt Open Source
 DefaultDirName={autopf}\Volt

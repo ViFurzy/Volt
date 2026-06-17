@@ -219,18 +219,34 @@ class MonitorService:
         def _do() -> None:
             if device_id.startswith("hid:"):
                 parts = device_id.split(":")
-                if len(parts) == 3:
+                if len(parts) >= 3:
                     try:
                         vid = int(parts[1], 16)
                         pid = int(parts[2], 16)
-                        for key in list(self._open.keys()):
-                            if key[0] == vid and key[1] == pid:
-                                handle = self._open.pop(key)
-                                driver = get_driver_for_device(vid, pid)
-                                if driver:
-                                    driver.close_device(handle)
-                                self._voltage_history.pop(key, None)
-                                self._registry.mark_offline(key)
+                        dev_idx = int(parts[3], 16) if len(parts) == 4 else None
+                        
+                        cfg = load_config()
+                        monitored = cfg.get("monitored_devices", [])
+                        monitored_ids = {d["id"] for d in monitored if d.get("type") == "hid"}
+                        
+                        parent_id = f"hid:{vid:04X}:{pid:04X}"
+                        is_any_left = any(mid == parent_id or mid.startswith(parent_id + ":") for mid in monitored_ids)
+                        
+                        if not is_any_left:
+                            for key in list(self._open.keys()):
+                                if key[0] == vid and key[1] == pid:
+                                    handle = self._open.pop(key)
+                                    driver = get_driver_for_device(vid, pid)
+                                    if driver:
+                                        driver.close_device(handle)
+                                    self._voltage_history.pop(key, None)
+                                    self._registry.mark_offline(key)
+                        
+                        driver = get_driver_for_device(vid, pid)
+                        child_dev_idx = dev_idx if dev_idx is not None else (driver.dev_idx if driver else 0xFF)
+                        child_key = (vid, pid, child_dev_idx)
+                        self._voltage_history.pop(child_key, None)
+                        self._registry.mark_offline(child_key)
                     except Exception:
                         pass
             else:
@@ -322,18 +338,34 @@ class MonitorService:
                             if handle:
                                 try:
                                     res = driver.probe_battery(handle, driver.dev_idx)
-                                    if res and res.percent != 0:
-                                        battery_val = res.percent
+                                    if res:
+                                        if isinstance(res, dict):
+                                            for child_idx, child_res in res.items():
+                                                child_id = f"hid:{vid:04X}:{pid:04X}:{child_idx:02X}"
+                                                child_name = child_res.device_name if child_res.device_name else f"Logitech Device {child_idx}"
+                                                if not any(d["id"] == child_id for d in hid_devices):
+                                                    hid_devices.append({
+                                                        "id": child_id,
+                                                        "name": child_name,
+                                                        "battery": child_res.percent,
+                                                        "type": "hid",
+                                                        "connected": True,
+                                                    })
+                                            continue
+                                        else:
+                                            if res.percent != 0:
+                                                battery_val = res.percent
                                 except Exception:
                                     pass
 
-                        hid_devices.append({
-                            "id": hid_id,
-                            "name": name,
-                            "battery": battery_val,
-                            "type": "hid",
-                            "connected": True,
-                        })
+                        if not any(d["id"] == hid_id for d in hid_devices):
+                            hid_devices.append({
+                                "id": hid_id,
+                                "name": name,
+                                "battery": battery_val,
+                                "type": "hid",
+                                "connected": True,
+                            })
         except Exception:
             pass
 
@@ -354,7 +386,7 @@ class MonitorService:
             interfaces = driver.find_devices(verbose=False)
             for info in interfaces:
                 vid, pid = info["vendor_id"], info["product_id"]
-                if (vid, pid) in KNOWN_DEVICES:
+                if (vid, pid) in KNOWN_DEVICES or (vid, pid) in driver.supported_devices:
                     found_keys.add((vid, pid, driver.dev_idx))
                     info['_driver'] = driver
                     all_interfaces.append(info)
@@ -369,9 +401,17 @@ class MonitorService:
         for key in list(self._open.keys()):
             vid, pid, dev_idx = key
             hid_id = f"hid:{vid:04X}:{pid:04X}"
-            if key not in found_keys or hid_id not in monitored_ids:
+            is_monitored = hid_id in monitored_ids or any(mid.startswith(hid_id + ":") for mid in monitored_ids)
+            if key not in found_keys or not is_monitored:
                 offline_state = self._registry.mark_offline(key)
-                if offline_state is not None and hid_id in monitored_ids:
+                for r_state in self._registry.all():
+                    if r_state.vid == vid and r_state.pid == pid:
+                        r_key = (vid, pid, r_state.dev_idx)
+                        child_offline = self._registry.mark_offline(r_key)
+                        if child_offline is not None:
+                            self._ui_queue.put(child_offline)
+                
+                if offline_state is not None and is_monitored:
                     self._ui_queue.put(offline_state)
                 handle = self._open[key]
                 driver = get_driver_for_device(key[0], key[1])
@@ -389,7 +429,8 @@ class MonitorService:
             key = (vid, pid, driver.dev_idx)
             hid_id = f"hid:{vid:04X}:{pid:04X}"
 
-            if hid_id not in monitored_ids and hid_id in ignored:
+            is_monitored = hid_id in monitored_ids or any(mid.startswith(hid_id + ":") for mid in monitored_ids)
+            if not is_monitored and hid_id in ignored:
                 continue
 
             if key in self._open:
@@ -400,18 +441,20 @@ class MonitorService:
                 continue
             self._open[key] = handle
 
+            device_name = KNOWN_DEVICES.get((vid, pid))
+            if device_name is None:
+                device_name = driver.supported_devices.get((vid, pid), "Unknown Device")
+
             # Since it successfully opened, ensure it is added to monitored
-            if hid_id not in monitored_ids:
-                name = KNOWN_DEVICES[(vid, pid)]
+            if not is_monitored:
                 monitored.append({
                     "id": hid_id,
-                    "name": name,
+                    "name": device_name,
                     "type": "hid"
                 })
                 changed = True
                 monitored_ids.add(hid_id)
 
-            device_name = KNOWN_DEVICES[(vid, pid)]
             state = DeviceState(
                 vid=vid,
                 pid=pid,
@@ -433,19 +476,21 @@ class MonitorService:
             if entry.get("type") == "hid":
                 hid_id = entry["id"]
                 parts = hid_id.split(":")
-                if len(parts) == 3:
+                if len(parts) >= 3:
                     try:
                         vid = int(parts[1], 16)
                         pid = int(parts[2], 16)
+                        dev_idx = int(parts[3], 16) if len(parts) == 4 else None
+                        
                         is_open = any(k[0] == vid and k[1] == pid for k in self._open)
                         if not is_open:
                             device_name = entry.get("name", KNOWN_DEVICES.get((vid, pid), "Unknown"))
                             driver = get_driver_for_device(vid, pid)
-                            dev_idx = driver.dev_idx if driver else 0
+                            resolved_dev_idx = dev_idx if dev_idx is not None else (driver.dev_idx if driver else 0xFF)
                             state = DeviceState(
                                 vid=vid,
                                 pid=pid,
-                                dev_idx=dev_idx,
+                                dev_idx=resolved_dev_idx,
                                 device_name=device_name,
                                 percent=None,
                                 charging=False,
@@ -551,60 +596,121 @@ class MonitorService:
                 continue
             
             result = driver.probe_battery(handle, dev_idx)
-            if result is None or result.percent == 0:
-                # Headset off, transitioning, or zero-voltage transient — mark
-                # OFFLINE but keep handle so recovery is automatic on next poll.
-                offline_state = self._registry.mark_offline(key)
-                if offline_state is not None:
-                    self._ui_queue.put(offline_state)
-            else:
-                if result.voltage_mv != 0:
-                    # Smooth raw voltage over the last _VOLTAGE_WINDOW readings to
-                    # eliminate ADC jitter that causes ±1% flicker.
-                    hist = self._voltage_history.setdefault(key, deque(maxlen=_VOLTAGE_WINDOW))
-                    hist.append(result.voltage_mv)
-                    smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
-                else:
-                    # SteelSeries reports voltage_mv=0; use percent directly, no smoothing.
-                    smoothed_percent = result.percent
-                # D-03: charging=True → CHARGING; else → ONLINE
-                status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
-                
-                if result.charging:
-                    if key not in self._percent_before_charging:
-                        last_state = self._registry.get(key)
-                        if last_state and last_state.percent is not None:
-                            self._percent_before_charging[key] = last_state.percent
-                        else:
-                            self._percent_before_charging[key] = smoothed_percent
-                        self._last_charging_percent_update[key] = now
+            if isinstance(result, dict):
+                active_child_keys = set()
+                for child_idx, child_res in result.items():
+                    child_key = (vid, pid, child_idx)
+                    active_child_keys.add(child_key)
+                    self._last_poll_time[child_key] = now
                     
-                    # Update baseline charging percent only once every 2 minutes (120s)
-                    last_update = self._last_charging_percent_update.get(key, 0.0)
-                    if now - last_update >= 120.0:
-                        self._last_charging_percent_update[key] = now
-                        if smoothed_percent is not None and self._percent_before_charging[key] is not None:
-                            if smoothed_percent > self._percent_before_charging[key]:
-                                self._percent_before_charging[key] = smoothed_percent
+                    if child_res is None or child_res.percent == 0 or child_res.percent is None:
+                        offline_state = self._registry.mark_offline(child_key)
+                        if offline_state is not None:
+                            self._ui_queue.put(offline_state)
+                    else:
+                        if child_res.voltage_mv != 0:
+                            hist = self._voltage_history.setdefault(child_key, deque(maxlen=_VOLTAGE_WINDOW))
+                            hist.append(child_res.voltage_mv)
+                            smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
+                        else:
+                            smoothed_percent = child_res.percent
+                        
+                        status = DeviceStatus.CHARGING if child_res.charging else DeviceStatus.ONLINE
+                        
+                        if child_res.charging:
+                            if child_key not in self._percent_before_charging:
+                                last_state = self._registry.get(child_key)
+                                if last_state and last_state.percent is not None:
+                                    self._percent_before_charging[child_key] = last_state.percent
+                                else:
+                                    self._percent_before_charging[child_key] = smoothed_percent
+                                self._last_charging_percent_update[child_key] = now
                             
-                    percent = self._percent_before_charging.get(key, smoothed_percent)
+                            last_update = self._last_charging_percent_update.get(child_key, 0.0)
+                            if now - last_update >= 120.0:
+                                self._last_charging_percent_update[child_key] = now
+                                if smoothed_percent is not None and self._percent_before_charging[child_key] is not None:
+                                    if smoothed_percent > self._percent_before_charging[child_key]:
+                                        self._percent_before_charging[child_key] = smoothed_percent
+                            
+                            percent = self._percent_before_charging.get(child_key, smoothed_percent)
+                        else:
+                            self._percent_before_charging.pop(child_key, None)
+                            self._last_charging_percent_update.pop(child_key, None)
+                            percent = smoothed_percent
+                        
+                        device_name = child_res.device_name if child_res.device_name else KNOWN_DEVICES.get((vid, pid), "Logitech Device")
+                        state = DeviceState(
+                            vid=vid,
+                            pid=pid,
+                            dev_idx=child_idx,
+                            device_name=device_name,
+                            percent=percent,
+                            charging=child_res.charging,
+                            status=status,
+                        )
+                        self._registry.upsert(state)
+                        self._ui_queue.put(state)
+                
+                for r_state in self._registry.all():
+                    if r_state.vid == vid and r_state.pid == pid:
+                        r_key = (vid, pid, r_state.dev_idx)
+                        if r_key not in active_child_keys and r_state.status != DeviceStatus.OFFLINE:
+                            offline_state = self._registry.mark_offline(r_key)
+                            if offline_state is not None:
+                                self._ui_queue.put(offline_state)
+            else:
+                if result is None or result.percent == 0:
+                    offline_state = self._registry.mark_offline(key)
+                    if offline_state is not None:
+                        self._ui_queue.put(offline_state)
                 else:
-                    self._percent_before_charging.pop(key, None)
-                    self._last_charging_percent_update.pop(key, None)
-                    percent = smoothed_percent
+                    if result.voltage_mv != 0:
+                        hist = self._voltage_history.setdefault(key, deque(maxlen=_VOLTAGE_WINDOW))
+                        hist.append(result.voltage_mv)
+                        smoothed_percent = voltage_to_percent(round(sum(hist) / len(hist)))
+                    else:
+                        smoothed_percent = result.percent
+                    status = DeviceStatus.CHARGING if result.charging else DeviceStatus.ONLINE
+                    
+                    if result.charging:
+                        if key not in self._percent_before_charging:
+                            last_state = self._registry.get(key)
+                            if last_state and last_state.percent is not None:
+                                self._percent_before_charging[key] = last_state.percent
+                            else:
+                                self._percent_before_charging[key] = smoothed_percent
+                            self._last_charging_percent_update[key] = now
+                        
+                        last_update = self._last_charging_percent_update.get(key, 0.0)
+                        if now - last_update >= 120.0:
+                            self._last_charging_percent_update[key] = now
+                            if smoothed_percent is not None and self._percent_before_charging[key] is not None:
+                                if smoothed_percent > self._percent_before_charging[key]:
+                                    self._percent_before_charging[key] = smoothed_percent
+                                
+                        percent = self._percent_before_charging.get(key, smoothed_percent)
+                    else:
+                        self._percent_before_charging.pop(key, None)
+                        self._last_charging_percent_update.pop(key, None)
+                        percent = smoothed_percent
 
-                device_name = KNOWN_DEVICES.get((vid, pid), "Unknown")
-                state = DeviceState(
-                    vid=vid,
-                    pid=pid,
-                    dev_idx=dev_idx,
-                    device_name=device_name,
-                    percent=percent,
-                    charging=result.charging,
-                    status=status,
-                )
-                self._registry.upsert(state)
-                self._ui_queue.put(state)
+                    device_name = KNOWN_DEVICES.get((vid, pid))
+                    if device_name is None:
+                        device_name = driver.supported_devices.get((vid, pid), "Unknown Device")
+                    if result.device_name is not None:
+                        device_name = result.device_name
+                    state = DeviceState(
+                        vid=vid,
+                        pid=pid,
+                        dev_idx=dev_idx,
+                        device_name=device_name,
+                        percent=percent,
+                        charging=result.charging,
+                        status=status,
+                    )
+                    self._registry.upsert(state)
+                    self._ui_queue.put(state)
 
         # BT device battery refresh (BT-04): re-run resolve_battery() for each tracked BT device.
         if force or (now - self._last_bt_poll_time >= self.poll_interval):

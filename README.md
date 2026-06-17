@@ -15,7 +15,7 @@ Unlike official manufacturer suites, Volt operates with zero bloated processes, 
 If you are a user and just want to install the application on Windows, you do **not** need to set up Python or compile the source code:
 
 1. **Download the Installer**: Click the link below to download the latest setup program directly:
-   👉 **[Download Volt_Setup.exe (v0.5.0)](https://github.com/ViFurzy/Volt/raw/main/dist/Volt_Setup.exe)** 👈
+   👉 **[Download Volt_Setup.exe (v0.5.1)](https://github.com/ViFurzy/Volt/raw/main/dist/Volt_Setup.exe)** 👈
 2. **Run the Installer**: Double-click `Volt_Setup.exe` in your Downloads folder and run the setup.
 3. **Configure Installation**: Select optional configurations such as creating a desktop shortcut or registering Volt to launch at Windows startup.
 4. **Launch**: Open Volt from your Start Menu, Desktop, or system tray.

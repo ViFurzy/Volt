@@ -43,8 +43,8 @@ def test_mainwindow_has_five_page_stack(qapp):
     """MainWindow embeds a QStackedWidget with exactly 5 pages (D-03)."""
     from ui.main_window import MainWindow
     window = MainWindow()
-    stacks = window.findChildren(QStackedWidget)
-    assert len(stacks) == 1, "Expected exactly one QStackedWidget"
+    stacks = [s for s in window.findChildren(QStackedWidget) if s.objectName() != "qt_tabwidget_stackedwidget"]
+    assert len(stacks) == 1, "Expected exactly one main QStackedWidget"
     assert stacks[0].count() == 5, f"Expected 5 pages, got {stacks[0].count()}"
 
 
@@ -84,6 +84,22 @@ def test_dashboard_layout_accessible(qapp):
     assert hasattr(window, "dashboard_layout")
     assert hasattr(window, "_cards")
     assert isinstance(window._cards, dict)
+
+
+
+def test_mainwindow_startup_update_check_in_production(qapp, mocker):
+    """Verify that startup update check runs when sys.modules does not contain pytest."""
+    mock_singleshot = mocker.patch("ui.main_window.QTimer.singleShot")
+    
+    # Mock sys.modules to exclude pytest
+    mock_modules = {"some_other_module": None}
+    mocker.patch("sys.modules", mock_modules)
+    
+    from ui.main_window import MainWindow
+    window = MainWindow()
+    
+    mock_singleshot.assert_called_once()
+    assert mock_singleshot.call_args[0][0] == 1000
 
 
 # ---------------------------------------------------------------------------

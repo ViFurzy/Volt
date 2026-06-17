@@ -146,7 +146,7 @@ class BatteryGauge(QWidget):
         p.setBrush(Qt.BrushStyle.NoBrush)
         if self._percent is not None:
             font = QFont("Segoe UI")
-            font.setPixelSize(30)
+            font.setPointSize(24)
             font.setBold(True)
             p.setFont(font)
             p.setPen(QColor(color))
@@ -159,7 +159,7 @@ class BatteryGauge(QWidget):
             label = self._state_label()
             if label:
                 font2 = QFont("Segoe UI")
-                font2.setPixelSize(11)
+                font2.setPointSize(9)
                 p.setFont(font2)
                 label_color = color if (self._percent <= 45 or self._offline) else "#888899"
                 p.setPen(QColor(label_color))
@@ -171,7 +171,7 @@ class BatteryGauge(QWidget):
         else:
             text = "--" if self._offline else "N/A"
             font = QFont("Segoe UI")
-            font.setPixelSize(22)
+            font.setPointSize(18)
             font.setBold(True)
             p.setFont(font)
             p.setPen(QColor("#666677"))
@@ -252,6 +252,7 @@ class DeviceCard(QFrame):
         status_row.setSpacing(8)
         status_row.addWidget(self._status)
         status_row.addWidget(self._charging_indicator)
+        self._status_row = status_row
 
         # ── Top row: name (left) + menu button (right) ─────────────
         top_row = QHBoxLayout()
@@ -322,9 +323,22 @@ class DeviceCard(QFrame):
         if is_offline:
             self._opacity_effect.setOpacity(0.4)
             self.setProperty("offline", True)
+            self.setMinimumSize(220, 70)
+            self.setMaximumSize(340, 70)
+            self._gauge.setVisible(False)
+            self._status.setStyleSheet("font-size: 11px; color: #777788; font-weight: normal; background: transparent;")
+            self._status.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self._status_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
         else:
             self._opacity_effect.setOpacity(1.0)
             self.setProperty("offline", False)
+            self.setMinimumSize(220, 240)
+            self.setMaximumSize(340, 260)
+            self._gauge.setVisible(True)
+            self._status.setStyleSheet("font-size: 11px; color: #888899;")
+            self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._status_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
         self.style().unpolish(self)
         self.style().polish(self)
+

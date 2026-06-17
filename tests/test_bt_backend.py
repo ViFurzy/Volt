@@ -21,6 +21,15 @@ from monitor.bt_backend import (
 
 
 # ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def mock_is_bluetooth_enabled(mocker):
+    return mocker.patch("monitor.bt_backend.is_bluetooth_enabled", return_value=True)
+
+
+# ---------------------------------------------------------------------------
 # TestWinrtEnumerate
 # ---------------------------------------------------------------------------
 

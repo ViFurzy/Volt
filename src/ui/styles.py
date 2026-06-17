@@ -29,13 +29,13 @@ QMainWindow, QWidget {
 }
 #voltTitle {
     color: #7B9FFF;
-    font-size: 22px;
+    font-size: 17pt;
     font-weight: bold;
     background-color: transparent;
 }
 #voltSubtitle {
     color: #888899;
-    font-size: 9px;
+    font-size: 7pt;
     letter-spacing: 3px;
     background-color: transparent;
 }
@@ -46,7 +46,7 @@ QPushButton#navButton {
     border-left: 3px solid transparent;
     padding: 10px 16px;
     text-align: left;
-    font-size: 13px;
+    font-size: 10pt;
     border-radius: 0px;
 }
 QPushButton#navButton:checked {
@@ -66,7 +66,7 @@ QPushButton#deviceSubItem {
     border-left: 3px solid transparent;
     padding: 5px 16px 5px 40px;
     text-align: left;
-    font-size: 12px;
+    font-size: 9pt;
     border-radius: 0px;
 }
 QPushButton#deviceSubItem:checked {
@@ -85,10 +85,62 @@ QPushButton#deviceSubItem:hover:!checked {
     border: none;
 }
 
+QPushButton#sidebarVersionBtn {
+    font-size: 8pt;
+    color: #555566;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    margin: 0;
+    background: transparent;
+    text-align: left;
+    border: none;
+}
+QPushButton#sidebarVersionBtn:hover {
+    color: #7B9FFF;
+    text-decoration: underline;
+}
+QPushButton#sidebarVersionBtn[update_available="true"] {
+    color: #E89000;
+    font-weight: bold;
+}
+QPushButton#sidebarVersionBtn[update_available="true"]:hover {
+    color: #FFB033;
+}
+
+QPushButton#updBtn {
+    background-color: #202026;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: #FFFFFF;
+    font-size: 10pt;
+}
+QPushButton#updBtn:hover {
+    border-color: #7B9FFF;
+    background-color: #25253a;
+}
+QPushButton#updBtn:disabled {
+    color: #888899;
+    border-color: #25252f;
+    background-color: #1c1c22;
+}
+QPushButton#updBtn[update_available="true"] {
+    background-color: #E89000;
+    border-color: #E89000;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#updBtn[update_available="true"]:hover {
+    background-color: #FFB033;
+    border-color: #FFB033;
+}
+
 /* ── Dashboard ───────────────────────────────────────────── */
 #dashboardHeader {
     color: #FFFFFF;
-    font-size: 18px;
+    font-size: 14pt;
     font-weight: bold;
     background-color: transparent;
     padding: 4px 0;
@@ -135,7 +187,7 @@ QLabel { background-color: transparent; color: #FFFFFF; }
 QCheckBox {
     color: #AAAACC;
     spacing: 8px;
-    font-size: 13px;
+    font-size: 10pt;
 }
 QCheckBox::indicator {
     width: 16px;
@@ -171,7 +223,7 @@ QListWidget {
     border: 1px solid #25252f;
     border-radius: 4px;
     color: #CCCCDD;
-    font-size: 12px;
+    font-size: 9pt;
     outline: none;
 }
 QListWidget::item {
@@ -185,4 +237,63 @@ QListWidget::item:selected {
 QListWidget::item:hover:!selected {
     background-color: #22222e;
 }
+
+/* ── QTabWidget & QTabBar ────────────────────────────────── */
+QTabWidget::pane {
+    border: 1px solid #2a2a38;
+    background-color: #202026;
+    border-radius: 8px;
+    top: -1px;
+}
+QTabBar::tab {
+    background-color: #1a1a1f;
+    border: 1px solid #2a2a38;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 8px 16px;
+    color: #888899;
+    font-size: 10pt;
+    font-weight: bold;
+    margin-right: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #202026;
+    color: #7B9FFF;
+    border-color: #2a2a38;
+    border-top: 2px solid #7B9FFF;
+}
+QTabBar::tab:hover:!selected {
+    background-color: #25252f;
+    color: #CCCCDD;
+}
+
+/* ── QComboBox ───────────────────────────────────────────── */
+QComboBox {
+    background-color: #202026;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    padding: 4px 10px;
+    color: #FFFFFF;
+    font-size: 10pt;
+    min-width: 120px;
+}
+QComboBox:hover {
+    border-color: #7B9FFF;
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: none;
+}
+QComboBox QAbstractItemView {
+    background-color: #202026;
+    border: 1px solid #3a3a55;
+    selection-background-color: #282366;
+    selection-color: #7B9FFF;
+    color: #FFFFFF;
+    outline: none;
+}
 """
+

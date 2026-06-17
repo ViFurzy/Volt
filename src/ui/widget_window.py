@@ -1,17 +1,14 @@
 """WidgetWindow — compact always-on-top widget showing device name + battery level.
 
-Layout:
-    QFrame#widgetContainer
-        header row: "VOLT" label | [⊡ expand] [✕ hide]
-        divider
-        per-device _DeviceRow: [● dot] [name] [⚡] [percent]
-
-Toggled from MainWindow.enter_widget_mode() / exit_widget_mode().
-Position is saved to config on drag-release and window hide.
+Layout modes:
+  - Stack (vertical stack of rows, identical to v0.5.0 layout)
+  - Horizontal (device items displayed from left to right side-by-side)
+  - iPhone-like (circular rings with vector icons inside, displayed side-by-side)
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRectF, Signal
+from PySide6.QtGui import QPainter, QPen, QColor, QBrush, QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -25,62 +22,360 @@ from PySide6.QtWidgets import (
 from ui.settings_manager import get_device_battery_color, load_config, save_config
 
 
-class _DeviceRow(QFrame):
-    """Sleek device row with custom layout configuration."""
+def get_device_category(name: str) -> str:
+    """Classify the device type from its name to determine which icon to draw."""
+    name_lower = name.lower()
+    
+    # Specific overrides
+    if "pro x wireless" in name_lower and "superlight" not in name_lower:
+        return "headset"
+        
+    if "keyboard" in name_lower or "key" in name_lower or "pro x tkl" in name_lower:
+        return "keyboard"
+    if "head" in name_lower or "sound" in name_lower or "ear" in name_lower or "phone" in name_lower:
+        return "headset"
+    if "mouse" in name_lower or "g502" in name_lower or "g pro" in name_lower or "aerox" in name_lower or "pop" in name_lower:
+        return "mouse"
+    if "controller" in name_lower or "game" in name_lower or "pad" in name_lower or "stadia" in name_lower:
+        return "gamepad"
+    return "generic"
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+
+def get_ring_color(percent: int | None, charging: bool, offline: bool) -> str:
+    """Return the color used in the circular rings for consistency across layouts."""
+    if offline: return "#555566"
+    if charging: return "#4FC3F7"
+    if percent is None: return "#555566"
+    if percent <= 8: return "#EE6800"
+    if percent <= 45: return "#F0BB66"
+    return "#4CAF50"
+
+
+def draw_device_icon(p: QPainter, category: str, cx: float, cy: float, sz: float, color: str) -> None:
+    """Draw a vector icon for the given device category."""
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    icon_pen = QPen(QColor(color))
+    icon_pen.setWidthF(max(1.0, 1.5 * (sz / 48.0)))
+    icon_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    icon_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(icon_pen)
+
+    icon_scale = sz / 48.0
+    def sc(val: float) -> float:
+        return val * icon_scale
+
+    if category == "mouse":
+        p.drawRoundedRect(QRectF(cx - sc(5), cy - sc(8), sc(10), sc(16)), sc(4), sc(4))
+        p.drawLine(cx, cy - int(sc(8)), cx, cy - int(sc(2)))
+        p.drawEllipse(QRectF(cx - sc(1), cy - sc(6), sc(2), sc(3)))
+    elif category == "keyboard":
+        p.drawRoundedRect(QRectF(cx - sc(9), cy - sc(5), sc(18), sc(10)), sc(1.5), sc(1.5))
+        p.drawPoint(cx - int(sc(5)), cy - int(sc(2)))
+        p.drawPoint(cx - int(sc(2)), cy - int(sc(2)))
+        p.drawPoint(cx + int(sc(2)), cy - int(sc(2)))
+        p.drawPoint(cx + int(sc(5)), cy - int(sc(2)))
+        p.drawPoint(cx - int(sc(5)), cy + int(sc(1)))
+        p.drawLine(cx - int(sc(2)), cy + int(sc(1)), cx + int(sc(2)), cy + int(sc(1)))
+        p.drawPoint(cx + int(sc(5)), cy + int(sc(1)))
+    elif category == "headset":
+        p.drawArc(QRectF(cx - sc(8), cy - sc(7), sc(16), sc(16)), 0, 180 * 16)
+        p.drawRoundedRect(QRectF(cx - sc(9), cy - sc(1), sc(3), sc(5)), sc(1), sc(1))
+        p.drawRoundedRect(QRectF(cx + sc(6), cy - sc(1), sc(3), sc(5)), sc(1), sc(1))
+    elif category == "gamepad":
+        p.drawRoundedRect(QRectF(cx - sc(9), cy - sc(5), sc(18), sc(10)), sc(3), sc(3))
+        p.drawEllipse(QRectF(cx - sc(5), cy - sc(2), sc(3), sc(3)))
+        p.drawPoint(cx + int(sc(4)), cy - int(sc(2)))
+        p.drawPoint(cx + int(sc(2)), cy + int(sc(1)))
+    else:
+        p.drawLine(cx, cy - int(sc(7)), cx, cy + int(sc(7)))
+        p.drawLine(cx, cy - int(sc(7)), cx + int(sc(4)), cy - int(sc(3)))
+        p.drawLine(cx + int(sc(4)), cy - int(sc(3)), cx - int(sc(3)), cy + int(sc(3)))
+        p.drawLine(cx - int(sc(3)), cy + int(sc(3)), cx + int(sc(4)), cy + int(sc(6)))
+        p.drawLine(cx + int(sc(4)), cy + int(sc(6)), cx, cy + int(sc(2)))
+
+
+class MiniBatteryRing(QWidget):
+    """Mini circular battery ring gauge for iPhone-like widget mode.
+
+    Draws a circular arc representing battery level, with a custom vector icon
+    drawn in the center depending on the device category.
+    """
+    def __init__(self, size: int = 48, stroke: int = 4, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("deviceRow")
+        self.size = size
+        self.stroke = stroke
+        self.setFixedSize(size, size)
+        self._percent: int | None = None
+        self._charging: bool = False
+        self._offline: bool = False
+        self._category: str = "generic"
 
-        cfg = load_config()
-        self._is_vertical = cfg.get("widget_vertical_layout", False)
+    def apply_scale(self, size: int, stroke: int) -> None:
+        self.size = size
+        self.stroke = stroke
+        self.setFixedSize(size, size)
+        self.update()
 
-        self._name = QLabel()
-        self._name.setStyleSheet("font-size: 12px; font-weight: bold; color: #FFFFFF;")
+    def set_state(self, percent: int | None, charging: bool, offline: bool, category: str) -> None:
+        self._percent = percent
+        self._charging = charging
+        self._offline = offline
+        self._category = category
+        self.update()
 
-        self._charging = QLabel("⚡")
-        self._charging.setStyleSheet("font-size: 11px; color: #4FC3F7;")
-        self._charging.setVisible(False)
+    def _arc_color(self) -> str:
+        return get_ring_color(self._percent, self._charging, self._offline)
 
-        self._percent = QLabel()
-        self._percent.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._percent.setStyleSheet("font-size: 12px; font-weight: bold; color: #FFFFFF;")
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        sz = self.size
+        m = self.stroke // 2 + 2
+        rect = QRectF(m, m, sz - 2 * m, sz - 2 * m)
+
+        # Background track
+        bg_pen = QPen(QColor("#2a2a3a"))
+        bg_pen.setWidth(self.stroke)
+        bg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(bg_pen)
+        p.drawArc(rect, 0, 360 * 16)
+
+        # Filled arc (battery level)
+        color = self._arc_color()
+        fill_pen = QPen(QColor(color))
+        fill_pen.setWidth(self.stroke)
+        fill_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(fill_pen)
+
+        pct = self._percent if self._percent is not None else 0
+        fill_span = int(-360 * 16 * pct / 100)
+        if fill_span != 0:
+            p.drawArc(rect, 90 * 16, fill_span)
+
+        # Center vector icon
+        cx, cy = sz / 2.0, sz / 2.0
+        draw_device_icon(p, self._category, cx, cy, sz, color)
+
+        p.end()
+
+
+class VerticalBlockRowUI(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._scale = 1.0
+        self._name = ""
+        self._percent = None
+        self._charging = False
+        self._offline = False
+        self._category = "generic"
+        self._color = "#555566"
+        self._anim_val = 0.0
+
+    def set_anim_val(self, val: float):
+        self._anim_val = val
+        self.update()
+
+    def set_state(self, name, percent, charging, offline, category, color):
+        self._name = name
+        self._percent = percent
+        self._charging = charging
+        self._offline = offline
+        self._category = category
+        self._color = color
+        self.update()
+
+    def apply_scale(self, scale):
+        self._scale = scale
+        self.setFixedSize(int(84 * scale), int(88 * scale))
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        scale = self._scale
+        color = self._color
+        rect = self.rect()
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#1e1e28"))
+        p.drawRoundedRect(rect, 6 * scale, 6 * scale)
+
+        bar_w = 6 * scale
+        bar_margin = 4 * scale
+        bar_x = bar_margin
+        bar_y = bar_margin
+        bar_h = rect.height() - 2 * bar_margin
+        
+        p.setBrush(QColor("#14141d"))
+        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, bar_h), bar_w/2.0, bar_w/2.0)
+
+        fill_pct = self._anim_val if self._charging else (self._percent if self._percent is not None else 0)
+        if not self._offline and fill_pct > 0:
+            fill_h = bar_h * (min(100.0, float(fill_pct)) / 100.0)
+            fill_y = bar_y + bar_h - fill_h
+            p.setBrush(QColor(color))
+            p.drawRoundedRect(QRectF(bar_x, fill_y, bar_w, fill_h), bar_w/2.0, bar_w/2.0)
+
+        icon_sz = 44 * scale
+        cx = bar_x + bar_w + (rect.width() - (bar_x + bar_w)) / 2.0
+        cy = bar_y + icon_sz / 2.0 + 2 * scale
+        draw_device_icon(p, self._category, cx, cy, icon_sz, color if (not self._offline and self._percent is not None) else "#555566")
+
+        p.setPen(QColor("#FFFFFF") if not self._offline else QColor("#555566"))
+        font = QFont()
+        font.setPointSize(max(7, int(9 * scale)))
+        p.setFont(font)
+        
+        display_name = self._name
+        if len(display_name) > 10:
+            display_name = display_name[:8] + ".."
+        
+        text_rect = QRectF(bar_x + bar_w, cy + icon_sz/2.0 + 4*scale, rect.width() - (bar_x + bar_w), rect.height() - (cy + icon_sz/2.0 + 4*scale))
+        p.drawText(text_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, display_name)
+
+
+class MinimalListRowUI(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        self._name_lbl = QLabel()
+        self._pct_lbl = QLabel()
         self._bar = QProgressBar()
         self._bar.setTextVisible(False)
         self._bar.setRange(0, 100)
-        self._bar.setValue(0)
+        
+        layout.addWidget(self._name_lbl, 1)
+        layout.addWidget(self._pct_lbl)
+        layout.addSpacing(10)
+        layout.addWidget(self._bar)
 
-        if self._is_vertical:
-            self.setFixedHeight(48)
-            layout = QVBoxLayout(self)
-            layout.setContentsMargins(16, 8, 16, 8)
-            layout.setSpacing(4)
+        self._scale = 1.0
 
-            top_layout = QHBoxLayout()
-            top_layout.setContentsMargins(0, 0, 0, 0)
-            top_layout.setSpacing(8)
+    def set_anim_val(self, val: float):
+        self._bar.setValue(int(val))
 
-            top_layout.addWidget(self._name, 1)
-            top_layout.addWidget(self._charging)
-            top_layout.addWidget(self._percent)
+    def set_state(self, name, percent, charging, offline, category, color):
+        scale = self._scale
+        name_font_sz = max(6, int(9 * scale))
+        pct_font_sz = max(6, int(9 * scale))
 
-            self._bar.setFixedHeight(4)
+        display_name = name
+        if len(display_name) > 18:
+            display_name = display_name[:16] + ".."
 
-            layout.addLayout(top_layout)
-            layout.addWidget(self._bar)
+        if percent is not None and not offline:
+            self._pct_lbl.setText(f"{percent}%")
+            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: {color};")
+            self._name_lbl.setText(display_name)
+            self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; font-weight: bold; color: #FFFFFF;")
+            if not charging:
+                self._bar.setValue(percent)
         else:
-            self.setFixedHeight(36)
-            layout = QHBoxLayout(self)
-            layout.setContentsMargins(16, 0, 16, 0)
-            layout.setSpacing(10)
+            self._pct_lbl.setText("--")
+            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: #555566;")
+            self._name_lbl.setText(display_name)
+            self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; font-weight: bold; color: #555566;")
+            self._bar.setValue(0)
+            
+        self._bar.setStyleSheet(f"""
+            QProgressBar {{ background-color: #2a2a3a; border: none; border-radius: {max(2, int(4*scale))}px; }}
+            QProgressBar::chunk {{ background-color: {color}; border-radius: {max(2, int(4*scale))}px; }}
+        """)
 
-            self._bar.setFixedSize(36, 12)
+    def apply_scale(self, scale):
+        self._scale = scale
+        self.setFixedHeight(int(28 * scale))
+        self.layout().setContentsMargins(int(12 * scale), int(4 * scale), int(12 * scale), int(4 * scale))
+        self._bar.setFixedSize(int(32 * scale), int(12 * scale))
 
-            layout.addWidget(self._name, 1)
-            layout.addWidget(self._charging)
-            layout.addWidget(self._percent)
-            layout.addWidget(self._bar)
+
+class HorizontalRingsRowUI(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self._container = QFrame()
+        self._container.setStyleSheet("background: #121218; border: 1px solid #2a2a3a; border-radius: 6px;")
+        
+        c_layout = QHBoxLayout(self._container)
+        
+        self._ring = MiniBatteryRing(size=40, stroke=4)
+        
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(0)
+        self._name_lbl = QLabel()
+        self._pct_lbl = QLabel()
+        text_layout.addWidget(self._name_lbl)
+        text_layout.addWidget(self._pct_lbl)
+        text_layout.addStretch()
+        
+        c_layout.addWidget(self._ring)
+        c_layout.addLayout(text_layout)
+        
+        layout.addWidget(self._container)
+        self._scale = 1.0
+
+    def set_anim_val(self, val: float):
+        pass
+
+    def set_state(self, name, percent, charging, offline, category, color):
+        self._ring.set_state(percent, charging, offline, category)
+        scale = self._scale
+        name_font_sz = max(5, int(7 * scale))
+        pct_font_sz = max(6, int(8 * scale))
+
+        display_name = name.upper()
+        if len(display_name) > 16:
+            display_name = display_name[:14] + ".."
+
+        if percent is not None and not offline:
+            self._pct_lbl.setText(f"{percent}%")
+            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: {color}; border: none; background: transparent;")
+            self._name_lbl.setText(display_name)
+            self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; color: #FFFFFF; border: none; background: transparent;")
+        else:
+            self._pct_lbl.setText("--")
+            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: #555566; border: none; background: transparent;")
+            self._name_lbl.setText(display_name)
+            self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; color: #555566; border: none; background: transparent;")
+
+    def apply_scale(self, scale):
+        self._scale = scale
+        self.setFixedSize(int(145 * scale), int(54 * scale))
+        self.layout().setContentsMargins(int(4*scale), int(4*scale), int(4*scale), int(4*scale))
+        self._container.layout().setContentsMargins(int(8*scale), int(6*scale), int(8*scale), int(6*scale))
+        self._container.layout().setSpacing(int(10*scale))
+        self._ring.apply_scale(max(24, int(34 * scale)), max(2, int(4 * scale)))
+
+        
+class _DeviceRow(QFrame):
+    """Device visualization block with dynamic layouts."""
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("deviceRow")
+        cfg = load_config()
+        self._layout_mode = cfg.get("widget_layout_mode", "stack")
+        self._scale = cfg.get("widget_scale", 1.0)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        if self._layout_mode == "stack":
+            self._ui = VerticalBlockRowUI()
+        elif self._layout_mode == "horizontal":
+            self._ui = MinimalListRowUI()
+        elif self._layout_mode == "iphone":
+            self._ui = HorizontalRingsRowUI()
+        else:
+            self._ui = VerticalBlockRowUI()
+            
+        layout.addWidget(self._ui)
 
         from PySide6.QtCore import QTimer
         self._anim_timer = QTimer(self)
@@ -88,6 +383,17 @@ class _DeviceRow(QFrame):
         self._anim_timer.timeout.connect(self._on_anim_tick)
         self._anim_val = 0.0
         self._percent_val = 0
+        self._last_refresh_args = None
+
+    def apply_scale(self, scale: float) -> None:
+        self._scale = scale
+        self._ui.apply_scale(scale)
+        if self._layout_mode == "horizontal":
+            self.setFixedHeight(self._ui.height())
+            self.setMinimumWidth(int(100 * scale))
+            self.setMaximumWidth(16777215)
+        else:
+            self.setFixedSize(self._ui.size())
 
     def _on_anim_tick(self) -> None:
         if self._percent_val > 0:
@@ -95,60 +401,22 @@ class _DeviceRow(QFrame):
             self._anim_val += step
             if self._anim_val > self._percent_val:
                 self._anim_val = 0.0
-            self._bar.setValue(int(self._anim_val))
+            self._ui.set_anim_val(self._anim_val)
 
     def refresh(self, name: str, percent: int | None, charging: bool, offline: bool, threshold: int = 15) -> None:
-        color = get_device_battery_color(percent, threshold, charging, offline)
-
-        self._name.setText(name)
-        self._name.setStyleSheet(
-            f"font-size: 12px; font-weight: bold; color: {'#555566' if offline else '#FFFFFF'};"
-        )
-        self._charging.setVisible(bool(charging and not offline))
-
+        self._last_refresh_args = (name, percent, charging, offline, threshold)
+        color = get_ring_color(percent, charging, offline)
+        category = get_device_category(name)
+        
         self._percent_val = percent if percent is not None else 0
-
-        if percent is not None and not offline:
-            self._percent.setText(f"{percent}%")
-            self._percent.setStyleSheet(f"font-size: 12px; font-weight: bold; color: {color};")
-            
-            if charging:
-                if not self._anim_timer.isActive():
-                    self._anim_val = 0.0
-                    self._anim_timer.start()
-            else:
-                self._anim_timer.stop()
-                self._bar.setValue(percent)
+        if charging and not offline:
+            if not self._anim_timer.isActive():
+                self._anim_val = 0.0
+                self._anim_timer.start()
         else:
-            self._percent.setText("--")
-            self._percent.setStyleSheet("font-size: 12px; font-weight: bold; color: #555566;")
             self._anim_timer.stop()
-            self._bar.setValue(0)
 
-        if self._is_vertical:
-            self._bar.setStyleSheet(f"""
-                QProgressBar {{
-                    background-color: #2a2a38;
-                    border: none;
-                    border-radius: 2px;
-                }}
-                QProgressBar::chunk {{
-                    background-color: {color};
-                    border-radius: 2px;
-                }}
-            """)
-        else:
-            self._bar.setStyleSheet(f"""
-                QProgressBar {{
-                    background-color: #1a1a24;
-                    border: 1px solid #3a3a4a;
-                    border-radius: 4px;
-                }}
-                QProgressBar::chunk {{
-                    background-color: {color};
-                    border-radius: 3px;
-                }}
-            """)
+        self._ui.set_state(name, percent, charging, offline, category, color)
 
 
 class WidgetWindow(QWidget):
@@ -167,90 +435,126 @@ class WidgetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setObjectName("widgetWindow")
         
-        # Override the global dark theme's QWidget { background: #1a1a1f } 
-        # so our layout containers don't draw opaque black rectangles.
         self.setStyleSheet("""
             WidgetWindow, QWidget#widgetHeader, QWidget#widgetRows, _DeviceRow {
                 background: transparent;
             }
         """)
 
-        self._apply_flags()
-        self.setMinimumWidth(220)
-        self.setMaximumWidth(320)
+        # ── Outer container (border + rounded corners) ────────────────
+        self._container = QFrame()
+        self._container.setObjectName("widgetContainer")
+        
+        # Load scale config
+        cfg = load_config()
+        self._scale = cfg.get("widget_scale", 1.0)
+        
+        self._apply_opacity()
+
+        container_layout = QVBoxLayout(self._container)
+        container_layout.setContentsMargins(0, 0, 0, int(8 * self._scale))
+        container_layout.setSpacing(0)
+
+        # ── Header ────────────────────────────────────────────────────
+        self._header = QWidget()
+        self._header.setObjectName("widgetHeader")
+        self._header.setFixedHeight(int(38 * self._scale))
+        header_layout = QHBoxLayout(self._header)
+        header_layout.setContentsMargins(int(12 * self._scale), 0, int(8 * self._scale), 0)
+        header_layout.setSpacing(int(4 * self._scale))
+
+        self._title_lbl = QLabel()
+        import os
+        from PySide6.QtGui import QPixmap
+        icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.ico")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                self._title_lbl.setPixmap(pixmap.scaledToHeight(int(16 * self._scale), Qt.TransformationMode.SmoothTransformation))
+            else:
+                self._title_lbl.setText("VOLT")
+                self._title_lbl.setStyleSheet(f"font-size: {max(5, int(8 * self._scale))}pt; font-weight: bold; color: #444455;")
+        else:
+            self._title_lbl.setText("VOLT")
+            self._title_lbl.setStyleSheet(f"font-size: {max(5, int(8 * self._scale))}pt; font-weight: bold; color: #444455;")
+
+        self._expand_btn = QPushButton("⊡")
+        self._expand_btn.setFixedSize(int(22 * self._scale), int(22 * self._scale))
+        self._expand_btn.setToolTip("Expand to full window")
+        self._expand_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._expand_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #555566; border: none;"
+            f" font-size: {max(6, int(10 * self._scale))}pt; border-radius: {max(2, int(3 * self._scale))}px; }}"
+            f"QPushButton:hover {{ color: #7B9FFF; background: #2a2a38; }}"
+        )
+        self._expand_btn.clicked.connect(self._exit_callback)
+
+        self._close_btn = QPushButton("✕")
+        self._close_btn.setFixedSize(int(22 * self._scale), int(22 * self._scale))
+        self._close_btn.setToolTip("Hide to tray")
+        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._close_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #555566; border: none;"
+            f" font-size: {max(5, int(8 * self._scale))}pt; border-radius: {max(2, int(3 * self._scale))}px; }}"
+            f"QPushButton:hover {{ color: #FFFFFF; background: #C0392B; }}"
+        )
+        self._close_btn.clicked.connect(self.hide)
+
+        header_layout.addWidget(self._title_lbl)
+        header_layout.addStretch()
+        header_layout.addWidget(self._expand_btn)
+        header_layout.addWidget(self._close_btn)
+
+        container_layout.addWidget(self._header)
+
+        # Rebuild layout to initialize self._rows_widget and self._rows_layout
+        self.rebuild_layout()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
-
-        # ── Outer container (border + rounded corners) ────────────────
-        self._container = QFrame()
-        self._container.setObjectName("widgetContainer")
-        self._apply_opacity()
-
-        container_layout = QVBoxLayout(self._container)
-        container_layout.setContentsMargins(0, 0, 0, 8)
-        container_layout.setSpacing(0)
-
-        # ── Header ────────────────────────────────────────────────────
-        header = QWidget()
-        header.setObjectName("widgetHeader")
-        header.setFixedHeight(38)
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 0, 8, 0)
-        header_layout.setSpacing(4)
-
-        title = QLabel("VOLT")
-        title.setStyleSheet(
-            "font-size: 11px; font-weight: bold; color: #444455; letter-spacing: 2px;"
-        )
-
-        expand_btn = QPushButton("⊡")
-        expand_btn.setFixedSize(22, 22)
-        expand_btn.setToolTip("Expand to full window")
-        expand_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        expand_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #555566; border: none;"
-            " font-size: 14px; border-radius: 3px; }"
-            "QPushButton:hover { color: #7B9FFF; background: #2a2a38; }"
-        )
-        expand_btn.clicked.connect(self._exit_callback)
-
-        close_btn = QPushButton("✕")
-        close_btn.setFixedSize(22, 22)
-        close_btn.setToolTip("Hide to tray")
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet(
-            "QPushButton { background: transparent; color: #555566; border: none;"
-            " font-size: 11px; border-radius: 3px; }"
-            "QPushButton:hover { color: #FFFFFF; background: #C0392B; }"
-        )
-        close_btn.clicked.connect(self.hide)
-
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-        header_layout.addWidget(expand_btn)
-        header_layout.addWidget(close_btn)
-
-        # ── Device rows ───────────────────────────────────────────────
-        self._rows_widget = QWidget()
-        self._rows_widget.setObjectName("widgetRows")
-        self._rows_layout = QVBoxLayout(self._rows_widget)
-        self._rows_layout.setContentsMargins(0, 4, 0, 0)
-        self._rows_layout.setSpacing(2)
-
-        self._empty_lbl = QLabel("No devices monitored")
-        self._empty_lbl.setStyleSheet(
-            "font-size: 12px; color: #444455; padding: 6px 12px;"
-        )
-        self._rows_layout.addWidget(self._empty_lbl)
-
-        container_layout.addWidget(header)
-        container_layout.addWidget(self._rows_widget)
-
         outer.addWidget(self._container)
 
+        self._apply_flags()
         self._restore_position()
+
+    # ── Scaling API ───────────────────────────────────────────────────
+
+    def apply_scale(self, scale: float) -> None:
+        """Apply a new scale factor dynamically to the entire widget and its rows."""
+        self._scale = scale
+        self._container.layout().setContentsMargins(0, 0, 0, int(8 * scale))
+        
+        self._header.setFixedHeight(int(38 * scale))
+        self._header.layout().setContentsMargins(int(12 * scale), 0, int(8 * scale), 0)
+        self._header.layout().setSpacing(int(4 * scale))
+        
+        import os
+        from PySide6.QtGui import QPixmap
+        icon_path = os.path.join(os.path.dirname(__file__), "..", "assets", "icon.ico")
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                self._title_lbl.setPixmap(pixmap.scaledToHeight(int(16 * scale), Qt.TransformationMode.SmoothTransformation))
+            else:
+                self._title_lbl.setStyleSheet(f"font-size: {max(5, int(8 * scale))}pt; font-weight: bold; color: #444455;")
+        else:
+            self._title_lbl.setStyleSheet(f"font-size: {max(5, int(8 * scale))}pt; font-weight: bold; color: #444455;")
+        self._expand_btn.setFixedSize(int(22 * scale), int(22 * scale))
+        self._expand_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #555566; border: none;"
+            f" font-size: {max(6, int(10 * scale))}pt; border-radius: {max(2, int(3 * scale))}px; }}"
+            f"QPushButton:hover {{ color: #7B9FFF; background: #2a2a38; }}"
+        )
+        self._close_btn.setFixedSize(int(22 * scale), int(22 * scale))
+        self._close_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: #555566; border: none;"
+            f" font-size: {max(5, int(8 * scale))}pt; border-radius: {max(2, int(3 * scale))}px; }}"
+            f"QPushButton:hover {{ color: #FFFFFF; background: #C0392B; }}"
+        )
+
+        # Clear and rebuild layout structure
+        self.rebuild_layout()
 
     # ── Always-on-top ─────────────────────────────────────────────────
 
@@ -273,9 +577,9 @@ class WidgetWindow(QWidget):
         opacity = cfg.get("widget_opacity", 0.95)
         self._container.setStyleSheet(f"""
             QFrame#widgetContainer {{
-                background-color: rgba(20, 20, 28, {opacity});
-                border: 1px solid rgba(123, 159, 255, 0.2);
-                border-radius: 12px;
+                background-color: rgba(32, 32, 38, {opacity});
+                border: 1px solid #2a2a38;
+                border-radius: 0px;
             }}
         """)
 
@@ -308,15 +612,16 @@ class WidgetWindow(QWidget):
     ) -> None:
         """Create or update the row for this device key. Offline devices are hidden."""
         if offline:
-            # Hide existing row; don't create one for an offline device
             if key in self._rows:
                 self._rows[key].setVisible(False)
                 self._update_empty_label()
-                self.adjustSize()
+                self.resize_to_fit()
             return
 
         if isinstance(key, tuple) and len(key) == 3:
             device_id = f"hid:{key[0]:04X}:{key[1]:04X}"
+            if key[2] != 0xFF:
+                device_id = f"{device_id}:{key[2]:02X}"
         else:
             device_id = str(key)
 
@@ -331,10 +636,12 @@ class WidgetWindow(QWidget):
             row = _DeviceRow()
             self._rows[key] = row
             self._rows_layout.addWidget(row)
+        self._rows[key]._scale = self._scale
+        self._rows[key].apply_scale(self._scale)
         self._rows[key].refresh(name, percent, charging, offline, threshold=threshold)
         self._rows[key].setVisible(True)
         self._update_empty_label()
-        self.adjustSize()
+        self.resize_to_fit()
 
     def remove_device(self, key) -> None:
         """Remove the row for this device key."""
@@ -343,20 +650,126 @@ class WidgetWindow(QWidget):
             self._rows_layout.removeWidget(row)
             row.setParent(None)
         self._update_empty_label()
-        self.adjustSize()
+        self.resize_to_fit()
 
     def rebuild_layout(self) -> None:
-        """Clear all rows so they are fully reconstructed with the new orientation."""
+        """Clear all rows and recreate self._rows_widget with the new layout mode."""
+        # Save temporary list of device states
+        current_devices = []
+        for key, row in list(self._rows.items()):
+            if getattr(row, "_last_refresh_args", None) is not None:
+                current_devices.append((key, row._last_refresh_args, not row.isHidden()))
+
         for key in list(self._rows.keys()):
             row = self._rows.pop(key)
-            self._rows_layout.removeWidget(row)
             row.setParent(None)
+            row.deleteLater()
+            
+        if hasattr(self, "_rows_widget") and self._rows_widget is not None:
+            self._container.layout().removeWidget(self._rows_widget)
+            self._rows_widget.setParent(None)
+            self._rows_widget.deleteLater()
+            
+        cfg = load_config()
+        layout_mode = cfg.get("widget_layout_mode", "stack")
+        scale = self._scale
+        
+        self._rows_widget = QWidget()
+        self._rows_widget.setObjectName("widgetRows")
+        self._rows_widget.setStyleSheet("background: transparent;")
+        
+        if layout_mode == "stack":
+            self._rows_layout = QVBoxLayout(self._rows_widget)
+            self._rows_layout.setContentsMargins(int(10*scale), int(4*scale), int(10*scale), int(8*scale))
+            self._rows_layout.setSpacing(int(8*scale))
+        elif layout_mode == "horizontal":
+            self._rows_layout = QVBoxLayout(self._rows_widget)
+            self._rows_layout.setContentsMargins(0, int(4*scale), 0, int(8*scale))
+            self._rows_layout.setSpacing(0)
+        elif layout_mode == "iphone":
+            self._rows_layout = QHBoxLayout(self._rows_widget)
+            self._rows_layout.setContentsMargins(int(8*scale), int(4*scale), int(8*scale), int(8*scale))
+            self._rows_layout.setSpacing(0)
+            
+        self._empty_lbl = QLabel("No devices")
+        self._empty_lbl.setStyleSheet(f"font-size: {max(6, int(9 * scale))}pt; color: #444455; padding: {int(6 * scale)}px {int(12 * scale)}px;")
+        self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._rows_layout.addWidget(self._empty_lbl)
+        
+        self._container.layout().addWidget(self._rows_widget)
+
+        # Re-add and scale all devices
+        for key, last_args, was_visible in current_devices:
+            name, percent, charging, offline, threshold = last_args
+            self.update_device(key, name, percent, charging, offline)
+            if not was_visible:
+                self._rows[key].setVisible(False)
+
         self._update_empty_label()
-        self.adjustSize()
+        self.resize_to_fit()
 
     def _update_empty_label(self) -> None:
         any_visible = any(not r.isHidden() for r in self._rows.values())
         self._empty_lbl.setVisible(not any_visible)
+
+    def resize_to_fit(self) -> None:
+        """Dynamically set the window fixed size based on visible devices and layout mode."""
+        old_geom = self.geometry()
+        
+        visible_rows = [r for r in self._rows.values() if r is not None and not r.isHidden()]
+        visible_count = len(visible_rows)
+        
+        cfg = load_config()
+        layout_mode = cfg.get("widget_layout_mode", "stack")
+        scale = self._scale
+        
+        w, h = 0, 0
+        if visible_count == 0:
+            if layout_mode == "stack":
+                w, h = int(84 * scale), int(78 * scale)
+            elif layout_mode == "horizontal":
+                w, h = int(220 * scale), int(78 * scale)
+            elif layout_mode == "iphone":
+                w, h = int(161 * scale), int(78 * scale)
+        else:
+            if layout_mode == "stack":
+                w = int(104 * scale)
+                h = 38 + 4 + 8 + visible_count * 88 + max(0, visible_count - 1) * 8
+                h = int(h * scale)
+            elif layout_mode == "horizontal":
+                w = int(220 * scale)
+                h = 38 + 4 + 8 + visible_count * 28
+                h = int(h * scale)
+            elif layout_mode == "iphone":
+                w = 8 + 8 + visible_count * 145
+                w = int(w * scale)
+                h = int(104 * scale)
+                
+        # Enforce exact fixed dimensions matching the content scale
+        self.setMinimumSize(w, h)
+        self.setMaximumSize(w, h)
+        
+        if old_geom.width() > 0 and old_geom.height() > 0 and (old_geom.width() != w or old_geom.height() != h):
+            screen = self.screen()
+            if screen:
+                screen_geom = screen.geometry()
+                new_x = old_geom.x()
+                new_y = old_geom.y()
+                
+                # If widget center is in the right half of the screen, keep right edge anchored
+                if old_geom.center().x() > screen_geom.center().x():
+                    new_x = old_geom.right() - w + 1
+                    
+                # If widget center is in the bottom half of the screen, keep bottom edge anchored
+                if old_geom.center().y() > screen_geom.center().y():
+                    new_y = old_geom.bottom() - h + 1
+                    
+                self.setGeometry(new_x, new_y, w, h)
+                self._save_position()
+            else:
+                self.resize(w, h)
+        else:
+            self.resize(w, h)
 
     # ── Qt event overrides ────────────────────────────────────────────
 

@@ -40,42 +40,50 @@ def test_probe_battery_receiver_success_1004():
     # Bolt Receiver is 0xC548 (starts with 0xC5)
     handle = {"path": b"/dev/hid0", "product_id": 0xC548}
     
-    with patch("drivers.logitech.send_and_recv") as mock_send_recv:
-        # Mock index 1: Root:GetFeature returns feature index 2 for 0x1004
-        # GetBatteryStatus on feature index 2 returns battery report: level=80%, charging=1 (recharging)
-        # response: [0x10, device_idx, feat_idx, func_idx, level, status, ...]
-        mock_send_recv.side_effect = [
-            [0x10, 1, 0, 0, 2, 0, 0],  # GetFeature index query for 0x1004 -> index 2
-            [0x10, 1, 2, 0, 80, 1, 0], # GetBatteryStatus -> 80% battery, status recharging (1)
-        ]
-        
+    def mock_send_recv_side_effect(device, msg, *args, **kwargs):
+        device_idx = msg[1]
+        if device_idx == 1:
+            if msg[2] == 0x00:  # GetFeature index query
+                feature_id = (msg[4] << 8) | msg[5]
+                if feature_id == 0x1004:
+                    return [0x10, 1, 0, 0, 2, 0, 0]  # feature index 2
+            elif msg[2] == 2:  # GetBatteryStatus on feature index 2
+                return [0x10, 1, 2, 0, 80, 1, 0]
+        return None
+
+    with patch("drivers.logitech.send_and_recv", side_effect=mock_send_recv_side_effect):
         res = driver.probe_battery(handle, 0xFF)
         assert res is not None
-        assert res.percent == 80
-        assert res.charging is True
-        assert res.feature_used == "0x1004"
+        assert isinstance(res, dict)
+        assert 1 in res
+        assert res[1].percent == 80
+        assert res[1].charging is True
+        assert res[1].feature_used == "0x1004"
 
 
 def test_probe_battery_receiver_fallback_1000():
     driver = LogitechDriver()
     handle = {"path": b"/dev/hid0", "product_id": 0xC548}
     
-    with patch("drivers.logitech.send_and_recv") as mock_send_recv:
-        # Index 1: 
-        # - GetFeature 0x1004 returns None/Error (represented by returning None)
-        # - GetFeature 0x1000 returns index 3
-        # - GetBatteryStatus on feature index 3 returns level=50%, status=0 (discharging)
-        mock_send_recv.side_effect = [
-            None,                      # 0x1004 query returns None
-            [0x10, 1, 0, 0, 3, 0, 0],  # 0x1000 query returns index 3
-            [0x10, 1, 3, 0, 50, 0, 0], # GetBatteryStatus -> 50% battery, status discharging (0)
-        ]
-        
+    def mock_send_recv_side_effect(device, msg, *args, **kwargs):
+        device_idx = msg[1]
+        if device_idx == 1:
+            if msg[2] == 0x00:
+                feature_id = (msg[4] << 8) | msg[5]
+                if feature_id == 0x1000:
+                    return [0x10, 1, 0, 0, 3, 0, 0]  # feature index 3
+            elif msg[2] == 3:
+                return [0x10, 1, 3, 0, 50, 0, 0]
+        return None
+
+    with patch("drivers.logitech.send_and_recv", side_effect=mock_send_recv_side_effect):
         res = driver.probe_battery(handle, 0xFF)
         assert res is not None
-        assert res.percent == 50
-        assert res.charging is False
-        assert res.feature_used == "0x1000"
+        assert isinstance(res, dict)
+        assert 1 in res
+        assert res[1].percent == 50
+        assert res[1].charging is False
+        assert res[1].feature_used == "0x1000"
 
 
 def test_probe_battery_receiver_all_offline():
@@ -86,9 +94,11 @@ def test_probe_battery_receiver_all_offline():
         # All device channels return None (offline)
         res = driver.probe_battery(handle, 0xFF)
         assert res is not None
-        assert res.percent is None  # Connection online but battery level not available
-        assert res.charging is False
-        assert res.feature_used == "receiver"
+        assert isinstance(res, dict)
+        assert 0xFF in res
+        assert res[0xFF].percent is None  # Connection online but battery level not available
+        assert res[0xFF].charging is False
+        assert res[0xFF].feature_used == "receiver"
 
 
 def test_probe_battery_non_receiver_fallback():

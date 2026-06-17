@@ -16,10 +16,11 @@ _CALIB = [(3320, 0), (3670, 5), (3740, 20), (3780, 30), (3830, 50), (4150, 100)]
 
 @dataclass
 class BatteryResult:
-    percent: int
+    percent: int | None
     voltage_mv: int
     charging: bool
     feature_used: str
+    device_name: str | None = None
 
 
 def voltage_to_percent(mv: int) -> int:

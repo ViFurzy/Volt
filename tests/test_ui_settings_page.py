@@ -32,7 +32,7 @@ def test_settings_page_initializes_from_config(qapp, mock_config):
     """Verify that checkboxes/toggles read correct defaults from mock config."""
     page = SettingsPage()
     assert page._widget_show_beside_cb.isChecked() is False
-    assert page._widget_vertical_cb.isChecked() is False
+    assert page._widget_layout_mode_combo.currentIndex() == 0  # default "stack"
 
 
 def test_widget_show_beside_toggled(qapp, mock_config):
@@ -53,29 +53,62 @@ def test_widget_show_beside_toggled(qapp, mock_config):
 
 
 def test_widget_vertical_layout_toggled_no_window(qapp, mock_config):
-    """Verify that toggling the vertical layout switch updates the config value (with no window)."""
+    """Verify that changing layout mode combo updates the config value (with no window)."""
     page = SettingsPage()
-    assert page._widget_vertical_cb.isChecked() is False
-    
-    page._widget_vertical_cb.setChecked(True)
-    page._widget_vertical_cb.toggled.emit(True)
+    assert page._widget_layout_mode_combo.currentIndex() == 0  # default "stack"
+
+    page._widget_layout_mode_combo.setCurrentIndex(1)  # "horizontal"
     cfg = load_config()
-    assert cfg.get("widget_vertical_layout") is True
+    assert cfg.get("widget_layout_mode") == "horizontal"
 
 
 def test_widget_vertical_layout_toggled_with_window(qapp, mock_config, mocker):
-    """Verify that toggling vertical layout triggers rebuild_layout and sync on the window widget."""
+    """Verify that changing layout mode triggers rebuild_layout and sync on the window widget."""
     mock_window = mocker.MagicMock()
     mock_widget = mocker.MagicMock()
-    # Mock self._window._widget
     mock_window._widget = mock_widget
-    
+
     page = SettingsPage(window=mock_window)
-    page._widget_vertical_cb.setChecked(True)
-    page._widget_vertical_cb.toggled.emit(True)
-    
+    page._widget_layout_mode_combo.setCurrentIndex(1)  # "horizontal"
+
     cfg = load_config()
-    assert cfg.get("widget_vertical_layout") is True
+    assert cfg.get("widget_layout_mode") == "horizontal"
     mock_widget.rebuild_layout.assert_called_once()
     mock_window.sync_widget.assert_called_once()
+
+
+def test_widget_layout_mode_changed(qapp, mock_config, mocker):
+    """Verify that changing widget layout mode combo updates config and triggers rebuild."""
+    mock_window = mocker.MagicMock()
+    mock_widget = mocker.MagicMock()
+    mock_window._widget = mock_widget
+
+    page = SettingsPage(window=mock_window)
+    # Default is Stack
+    assert page._widget_layout_mode_combo.currentIndex() == 0
+
+    # Change to Horizontal
+    page._widget_layout_mode_combo.setCurrentIndex(1)
+
+    cfg = load_config()
+    assert cfg.get("widget_layout_mode") == "horizontal"
+    mock_widget.rebuild_layout.assert_called_once()
+    mock_window.sync_widget.assert_called_once()
+
+
+def test_widget_opacity_slider_bounds(qapp, mock_config):
+    """Verify that opacity slider maps 0% to 0.01 in config, and loads 0.01 back to 0%."""
+    page = SettingsPage()
+    
+    # Set slider to 0%
+    page._widget_opacity_slider.setValue(0)
+    page._widget_opacity_slider.valueChanged.emit(0)
+
+    cfg = load_config()
+    assert cfg.get("widget_opacity") == 0.01
+
+    # Reload page and verify it initializes to 0%
+    page2 = SettingsPage()
+    assert page2._widget_opacity_slider.value() == 0
+
 

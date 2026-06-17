@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -46,6 +46,8 @@ from ui.settings_manager import get_config_generation, load_config, save_config
 from ui.settings_page import SettingsPage
 from ui.sidebar import SidebarNav
 from ui.widget_window import WidgetWindow
+from ui.updater import UpdaterWorker
+from __version__ import __version__
 
 if TYPE_CHECKING:
     from monitor.state import DeviceState
@@ -184,13 +186,13 @@ class MainWindow(QMainWindow):
         dashboard_page, self.dashboard_layout, self._count_label = self._build_dashboard()
         self._stack.addWidget(dashboard_page)   # index 0
 
-        # Page 1 — Devices
+        # Page 1 — Devices (placeholder)
         self._devices_page = DevicesPage(
             service=service,
             loop=loop,
-            remove_card_callback=self.remove_bt_card,
+            remove_card_callback=self.remove_card,
         )
-        self._stack.addWidget(self._devices_page)           # index 1
+        self._stack.addWidget(_PlaceholderPage("Devices"))           # index 1
 
         # Page 2 — History
         self._history_page = HistoryPage()
@@ -200,7 +202,7 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(_PlaceholderPage("Profiles")) # index 3
 
         # Page 4 — Settings
-        self._settings_page = SettingsPage(service=service, window=self)
+        self._settings_page = SettingsPage(service=service, window=self, devices_page=self._devices_page)
         self._stack.addWidget(self._settings_page)          # index 4
 
         # ── Sidebar ────────────────────────────────────────────────
@@ -277,11 +279,28 @@ class MainWindow(QMainWindow):
         # Compact widget — created here, shown/hidden via enter/exit_widget_mode()
         self._widget = WidgetWindow(exit_callback=self.exit_widget_mode)
 
+        # Startup update check
+        self._update_state = "idle"
+        self._latest_version = None
+        self._latest_url = None
+        
+        self._sidebar.version_clicked.connect(self._on_sidebar_version_clicked)
+
+        import sys
+        if "pytest" not in sys.modules:
+            self._update_state = "checking"
+            self._startup_updater = UpdaterWorker()
+            self._startup_updater.update_available.connect(self._on_startup_update_available)
+            self._startup_updater.no_update.connect(self._on_startup_no_update)
+            self._startup_updater.error.connect(self._on_startup_update_error)
+            QTimer.singleShot(1000, self._startup_updater.check_for_updates)
+
     # ── Dashboard builder ──────────────────────────────────────────
 
     def _navigate_to_devices(self) -> None:
-        """Navigate sidebar + stack to the Devices page."""
+        """Navigate sidebar + stack to Settings and select the Monitor tab."""
         self._sidebar.navigate_to(1)
+        self._settings_page._tabs.setCurrentIndex(1)
 
     def _get_monitored_ids(self) -> set[str]:
         """Return the set of monitored device IDs, rebuilding only when config changed.
@@ -311,10 +330,28 @@ class MainWindow(QMainWindow):
         count_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(count_label)
 
+        # Online heading
+        self._online_header = QLabel("Online")
+        self._online_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #7B9FFF; margin-top: 8px; background: transparent;")
+        outer.addWidget(self._online_header)
+
         # Cards area — FlowLayout wraps cards to the next row when window is narrowed
         cards_widget = QWidget()
         cards_layout = FlowLayout(cards_widget, h_spacing=16, v_spacing=16)
         outer.addWidget(cards_widget)
+
+        # Offline heading
+        self._offline_header = QLabel("Offline")
+        self._offline_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #888899; margin-top: 16px; background: transparent;")
+        self._offline_header.setVisible(False)
+        outer.addWidget(self._offline_header)
+
+        # Offline cards area
+        self._offline_widget = QWidget()
+        self._offline_layout = FlowLayout(self._offline_widget, h_spacing=16, v_spacing=16)
+        self._offline_widget.setVisible(False)
+        outer.addWidget(self._offline_widget)
+
         outer.addStretch()
 
         # Empty-state placeholder — shown when _cards is empty
@@ -423,7 +460,129 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def _on_startup_update_available(self, version: str, url: str) -> None:
+        """Called if a newer version is found during background check."""
+        self._update_state = "update_available"
+        self._latest_version = version
+        self._latest_url = url
+        self._sidebar.set_update_available(version)
+        if hasattr(self, "_settings_page") and self._settings_page:
+            self._settings_page.set_update_available(version, url)
+
+    def _on_startup_no_update(self) -> None:
+        """Called if no update is found (or on 404)."""
+        self._update_state = "no_update"
+
+    def _on_startup_update_error(self, err: str) -> None:
+        """Called if check fails with error."""
+        self._update_state = "error"
+
+    def _on_sidebar_version_clicked(self) -> None:
+        """Handle click on the version label in the sidebar."""
+        if self._update_state == "update_available" and self._latest_version and self._latest_url:
+            self._prompt_update(self._latest_version, self._latest_url)
+        elif self._update_state == "no_update":
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Up to Date",
+                f"You are running the latest version ({__version__})."
+            )
+        elif self._update_state == "checking":
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Checking for Updates",
+                "Checking for updates is in progress. Please wait..."
+            )
+        else:
+            # error or idle: re-run the check interactively
+            self._run_manual_update_check()
+
+    def _run_manual_update_check(self) -> None:
+        """Run a manual update check with a progress dialog."""
+        from PySide6.QtWidgets import QProgressDialog, QMessageBox
+        from PySide6.QtCore import Qt
+        
+        self._manual_updater = UpdaterWorker()
+        
+        progress = QProgressDialog("Checking for updates...", None, 0, 0, self)
+        progress.setWindowTitle("Volt Updater")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+        
+        def on_available(version, url):
+            progress.accept()
+            self._update_state = "update_available"
+            self._latest_version = version
+            self._latest_url = url
+            self._sidebar.set_update_available(version)
+            if hasattr(self, "_settings_page") and self._settings_page:
+                self._settings_page.set_update_available(version, url)
+            self._prompt_update(version, url)
+            
+        def on_no():
+            progress.accept()
+            self._update_state = "no_update"
+            QMessageBox.information(
+                self, "Up to Date",
+                f"You are running the latest version ({__version__})."
+            )
+            
+        def on_err(err):
+            progress.accept()
+            self._update_state = "error"
+            QMessageBox.warning(
+                self, "Update Error",
+                f"Failed to check for updates:\n{err}"
+            )
+            
+        self._manual_updater.update_available.connect(on_available)
+        self._manual_updater.no_update.connect(on_no)
+        self._manual_updater.error.connect(on_err)
+        
+        self._manual_updater.check_for_updates()
+
+    def _prompt_update(self, version: str, url: str) -> None:
+        """Prompt the user to download and install the update."""
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Update Available",
+            f"Version {version} is available.\nDo you want to download and install it now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if not hasattr(self, "_install_updater") or not self._install_updater:
+                self._install_updater = UpdaterWorker()
+            self._install_updater.error.connect(self._on_update_install_error)
+            self._install_updater.download_and_install(url)
+
+    def _on_update_install_error(self, err: str) -> None:
+        """Called if manual update download/installation fails."""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "Update Error", f"Failed to download update:\n{err}")
+
     # ── Device update consumer ─────────────────────────────────────
+
+    def _place_card(self, card: DeviceCard, is_offline: bool) -> None:
+        """Place the card in either the online or offline layout, adjusting section visibilities."""
+        target_layout = self._offline_layout if is_offline else self.dashboard_layout
+        if target_layout.indexOf(card) == -1:
+            self.dashboard_layout.removeWidget(card)
+            self._offline_layout.removeWidget(card)
+            
+            if is_offline:
+                self._offline_layout.addWidget(card)
+            else:
+                self.dashboard_layout.removeWidget(self._placeholder)
+                self.dashboard_layout.addWidget(card)
+                self.dashboard_layout.addWidget(self._placeholder)
+            
+        has_offline = any(
+            getattr(c.last_state, "status", None) == DeviceStatus.OFFLINE 
+            for c in self._cards.values()
+        )
+        self._offline_header.setVisible(has_offline)
+        self._offline_widget.setVisible(has_offline)
 
     def on_device_update(self, state: DeviceState) -> None:
         """Create or update the DeviceCard for the given DeviceState.
@@ -433,47 +592,59 @@ class MainWindow(QMainWindow):
         Subsequent calls update the existing card in place.
         """
         key = (state.vid, state.pid, state.dev_idx)
+        parent_hid_id = f"hid:{state.vid:04X}:{state.pid:04X}"
+        if state.dev_idx != 0xFF:
+            device_id = f"{parent_hid_id}:{state.dev_idx:02X}"
+        else:
+            device_id = parent_hid_id
         
-        # Guard: check if this HID device is still monitored
+        # Guard: check if this HID device is still monitored and not ignored
         if self._service is not None:
-            hid_id = f"hid:{state.vid:04X}:{state.pid:04X}"
-            if hid_id not in self._get_monitored_ids():
+            cfg = load_config()
+            ignored = cfg.get("ignored_devices", [])
+            if device_id in ignored or parent_hid_id in ignored:
                 if key in self._cards:
-                    self.remove_card(hid_id)
+                    self.remove_card(device_id)
+                return
+            
+            is_parent_monitored = parent_hid_id in self._get_monitored_ids()
+            is_child_monitored = device_id in self._get_monitored_ids()
+            if not is_parent_monitored and not is_child_monitored:
+                if key in self._cards:
+                    self.remove_card(device_id)
                 return
 
-        hid_id = f"hid:{state.vid:04X}:{state.pid:04X}"
         is_online = state.status != DeviceStatus.OFFLINE
         if is_online:
             import time
-            if hid_id not in self._device_online_time:
-                self._device_online_time[hid_id] = time.time()
+            if device_id not in self._device_online_time:
+                self._device_online_time[device_id] = time.time()
         else:
-            self._device_online_time.pop(hid_id, None)
+            self._device_online_time.pop(device_id, None)
 
         if state.percent is not None:
-            self._record_history(hid_id, state.device_name, state.percent)
+            self._record_history(device_id, state.device_name, state.percent)
 
         if key not in self._cards:
-            card = DeviceCard(state, device_id=hid_id)
-            card.remove_requested.connect(lambda did=hid_id: self._remove_monitored_device(did))
-            card.history_requested.connect(lambda name, did=hid_id: self.show_device_history(did))
+            card = DeviceCard(state, device_id=device_id)
+            card.remove_requested.connect(lambda did=device_id: self._remove_monitored_device(did))
+            card.history_requested.connect(lambda name, did=device_id: self.show_device_history(did))
             self._cards[key] = card
-            # Keep placeholder at the end
-            self.dashboard_layout.removeWidget(self._placeholder)
-            self.dashboard_layout.addWidget(card)
-            self.dashboard_layout.addWidget(self._placeholder)
             self._sidebar.register_device(key, state.device_name)
             self._count_label.setText(f"All Devices ({len(self._cards)})")
+            self._devices_page.refresh_monitored()
         else:
-            self._cards[key].update_state(state, device_id=hid_id)
+            card = self._cards[key]
+            card.update_state(state, device_id=device_id)
+
+        self._place_card(card, state.status == DeviceStatus.OFFLINE)
 
         self._widget.update_device(
             key, state.device_name, state.percent, state.charging,
             state.status == DeviceStatus.OFFLINE,
         )
 
-        if self._history_page._device_id == hid_id:
+        if self._history_page._device_id == device_id:
             self._history_page.update_state(state)
 
     def on_bt_device_update(self, info: BtDeviceInfo) -> None:
@@ -515,10 +686,6 @@ class MainWindow(QMainWindow):
             card.remove_requested.connect(lambda did=key: self._remove_monitored_device(did))
             card.history_requested.connect(lambda name, did=key: self.show_device_history(did))
             self._cards[key] = card
-            # Keep placeholder at the end
-            self.dashboard_layout.removeWidget(self._placeholder)
-            self.dashboard_layout.addWidget(card)
-            self.dashboard_layout.addWidget(self._placeholder)
             self._sidebar.register_device(key, info.name)
             self._count_label.setText(f"All Devices ({len(self._cards)})")
         else:
@@ -529,7 +696,10 @@ class MainWindow(QMainWindow):
                 charging=False,
                 status=info.status,
             )
-            self._cards[key].update_state(adapter, device_id=key)
+            card = self._cards[key]
+            card.update_state(adapter, device_id=key)
+
+        self._place_card(card, info.status == DeviceStatus.OFFLINE)
 
         self._widget.update_device(
             key, info.name, info.battery, False,
@@ -545,8 +715,10 @@ class MainWindow(QMainWindow):
         cfg["monitored_devices"] = [
             d for d in cfg.get("monitored_devices", []) if d["id"] != device_id
         ]
-        if "history" in cfg and device_id in cfg["history"]:
-            del cfg["history"][device_id]
+        ignored = cfg.get("ignored_devices", [])
+        if device_id not in ignored:
+            ignored.append(device_id)
+            cfg["ignored_devices"] = ignored
         save_config(cfg)
         self._devices_page.remove_monitored_device(device_id)
         self.remove_card(device_id)
@@ -608,6 +780,9 @@ class MainWindow(QMainWindow):
         Pops the card from _cards, detaches it from the layout, removes
         its sidebar sub-item, and stops the service from polling it.
         """
+        if self._service is not None and isinstance(device_id, str):
+            self._service.remove_monitored_device(device_id)
+
         keys_to_remove = []
         if isinstance(device_id, str) and device_id.startswith("hid:"):
             parts = device_id.split(":")
@@ -629,11 +804,19 @@ class MainWindow(QMainWindow):
             card = self._cards.pop(card_key, None)
             if card:
                 self.dashboard_layout.removeWidget(card)
+                self._offline_layout.removeWidget(card)
                 card.setParent(None)
             self._sidebar.remove_device(card_key)
             self._widget.remove_device(card_key)
 
         self._count_label.setText(f"All Devices ({len(self._cards)})")
+        
+        has_offline = any(
+            getattr(c.last_state, "status", None) == DeviceStatus.OFFLINE 
+            for c in self._cards.values()
+        )
+        self._offline_header.setVisible(has_offline)
+        self._offline_widget.setVisible(has_offline)
         
         # Stop service monitoring using string-based device_id
         if self._service is not None:

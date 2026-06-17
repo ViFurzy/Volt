@@ -25,15 +25,27 @@ class UpdaterWorker(QObject):
         def _check():
             try:
                 response = requests.get(API_URL, timeout=10)
-                if response.status_code != 200:
-                    self.error.emit(f"Failed to check updates (HTTP {response.status_code})")
+                if response.status_code == 404:
+                    try:
+                        self.no_update.emit()
+                    except RuntimeError:
+                        pass
+                    return
+                elif response.status_code != 200:
+                    try:
+                        self.error.emit(f"Failed to check updates (HTTP {response.status_code})")
+                    except RuntimeError:
+                        pass
                     return
                 
                 data = response.json()
                 latest_version = data.get("tag_name", "").lstrip("v")
                 
                 if not latest_version:
-                    self.error.emit("Invalid release format")
+                    try:
+                        self.error.emit("Invalid release format")
+                    except RuntimeError:
+                        pass
                     return
                     
                 # Simple version comparison
@@ -46,13 +58,25 @@ class UpdaterWorker(QObject):
                             break
                     
                     if download_url:
-                        self.update_available.emit(latest_version, download_url)
+                        try:
+                            self.update_available.emit(latest_version, download_url)
+                        except RuntimeError:
+                            pass
                     else:
-                        self.error.emit("No installer (.exe) found in the latest release")
+                        try:
+                            self.error.emit("No installer (.exe) found in the latest release")
+                        except RuntimeError:
+                            pass
                 else:
-                    self.no_update.emit()
+                    try:
+                        self.no_update.emit()
+                    except RuntimeError:
+                        pass
             except Exception as e:
-                self.error.emit(str(e))
+                try:
+                    self.error.emit(str(e))
+                except RuntimeError:
+                    pass
                 
         threading.Thread(target=_check, daemon=True).start()
 
@@ -80,7 +104,10 @@ class UpdaterWorker(QObject):
                 # Exit the app so installer can overwrite files
                 sys.exit(0)
             except Exception as e:
-                self.error.emit(f"Download failed: {str(e)}")
+                try:
+                    self.error.emit(f"Download failed: {str(e)}")
+                except RuntimeError:
+                    pass
                 
         threading.Thread(target=_download, daemon=True).start()
 

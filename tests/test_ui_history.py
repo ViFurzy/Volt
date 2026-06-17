@@ -93,7 +93,7 @@ def test_record_history_limit(clean_config, qtbot):
 
 
 def test_history_cleanup_on_device_removal(clean_config, qtbot):
-    """Verify that history is cleaned up when a monitored device is removed."""
+    """Verify that history is retained when a monitored device is removed."""
     window = MainWindow()
     qtbot.addWidget(window)
 
@@ -107,7 +107,7 @@ def test_history_cleanup_on_device_removal(clean_config, qtbot):
     window._remove_monitored_device("hid:1234:5678")
 
     cfg = load_config()
-    assert "hid:1234:5678" not in cfg.get("history", {})
+    assert "hid:1234:5678" in cfg.get("history", {})
 
 
 def test_history_page_device_selection(clean_config, qtbot):

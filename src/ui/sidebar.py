@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from __version__ import __version__
 from ui.icon import make_volt_icon
 
 SIDEBAR_WIDTH: int = 210
@@ -28,7 +29,6 @@ SIDEBAR_WIDTH: int = 210
 # (display label, stack page index)
 _NAV_ITEMS: list[tuple[str, int]] = [
     ("Dashboard", 0),
-    ("Devices",   1),
     ("Settings",  4),
 ]
 
@@ -37,6 +37,7 @@ class SidebarNav(QWidget):
     """Left navigation rail with Volt branding and device sub-items."""
 
     device_selected = Signal(object, str)
+    version_clicked = Signal()
 
     def __init__(self, stack: QStackedWidget, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,10 +73,10 @@ class SidebarNav(QWidget):
             self._group.addButton(btn, btn_id)
             root.addWidget(btn)
 
-            if label == "Devices":
+            if label == "Dashboard":
                 # Collapsible panel for connected device sub-items
                 self._devices_panel = QWidget()
-                self._devices_panel.setVisible(False)
+                self._devices_panel.setVisible(True)
                 self._devices_layout = QVBoxLayout(self._devices_panel)
                 self._devices_layout.setContentsMargins(0, 0, 0, 4)
                 self._devices_layout.setSpacing(1)
@@ -91,7 +92,16 @@ class SidebarNav(QWidget):
 
         _about_style = "font-size: 11px; color: #555566; padding: 0; background: transparent;"
         root.addSpacing(10)
-        for text in ("v1.0", "ViFurzy | vi-design.pro", "MIT License"):
+        
+        # Clickable version button
+        self._version_btn = QPushButton(f"v{__version__}")
+        self._version_btn.setObjectName("sidebarVersionBtn")
+        self._version_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._version_btn.setContentsMargins(16, 0, 16, 0)
+        self._version_btn.clicked.connect(self.version_clicked.emit)
+        root.addWidget(self._version_btn)
+
+        for text in ("ViFurzy | vi-design.pro", "MIT License"):
             lbl = QLabel(text)
             lbl.setStyleSheet(_about_style)
             lbl.setContentsMargins(16, 0, 16, 0)
@@ -102,9 +112,9 @@ class SidebarNav(QWidget):
         def _on_click(btn_id: int) -> None:
             self._clear_device_selections()
             self._stack.setCurrentIndex(_NAV_ITEMS[btn_id][1])
-            # Toggle device sub-items panel when Devices is active OR when history is shown (index 2)
+            # Toggle device sub-items panel when Dashboard is active (btn_id == 0) OR when history is shown (index 2)
             if self._devices_panel is not None:
-                self._devices_panel.setVisible(btn_id == 1 or self._stack.currentIndex() == 2)
+                self._devices_panel.setVisible(btn_id == 0 or self._stack.currentIndex() == 2)
 
         self._group.idClicked.connect(_on_click)
 
@@ -112,6 +122,7 @@ class SidebarNav(QWidget):
         btn0 = self._group.button(0)
         if btn0 is not None:
             btn0.setChecked(True)
+
 
     # ── Header ────────────────────────────────────────────────────
 
@@ -147,6 +158,13 @@ class SidebarNav(QWidget):
         btn = self._group.button(btn_id)
         if btn is not None:
             btn.click()
+
+    def set_update_available(self, version: str) -> None:
+        """Update the version button to show update available state."""
+        self._version_btn.setText(f"v{__version__} (Update Available)")
+        self._version_btn.setProperty("update_available", True)
+        self._version_btn.style().unpolish(self._version_btn)
+        self._version_btn.style().polish(self._version_btn)
 
     # ── Device sub-items API ──────────────────────────────────────
 

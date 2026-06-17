@@ -42,6 +42,26 @@ def query_hidpp20_battery(device, device_idx: int) -> BatteryResult | None:
                 pass
     return None
 
+def query_device_name(device, device_idx: int) -> str | None:
+    feat_name = get_feature_index(device, device_idx, 0x0005)
+    if feat_name is not None:
+        cmd_len = [0x10, device_idx, feat_name, 0x01, 0, 0, 0]
+        try:
+            resp_len = send_and_recv(device, cmd_len, min_len=6)
+            if resp_len:
+                name_len = resp_len[4]
+                name_bytes = bytearray()
+                for offset in range(0, name_len, 3):
+                    cmd_name = [0x10, device_idx, feat_name, 0x11, offset, 0, 0]
+                    resp_name = send_and_recv(device, cmd_name, min_len=6)
+                    if resp_name:
+                        name_bytes.extend(resp_name[4:7])
+                return name_bytes[:name_len].decode("utf-8", errors="ignore").strip()
+        except Exception:
+            pass
+    return None
+
+
 class LogitechDriver(BaseDriver):
     @property
     def supported_devices(self) -> dict[tuple[int, int], str]:
@@ -109,21 +129,34 @@ class LogitechDriver(BaseDriver):
         # Check if the opened handle corresponds to a receiver (PID 0xC5XX)
         is_receiver = pid is not None and ((pid & 0xFF00) == 0xC500)
         if is_receiver:
+            results = {}
             # Try to query connected paired devices on channels 1 to 6
             for idx in range(1, 7):
                 res = query_hidpp20_battery(handle, idx)
                 if res is not None:
-                    return res
+                    name = query_device_name(handle, idx)
+                    if not name:
+                        name = f"Logitech Device {idx}"
+                    res.device_name = name
+                    results[idx] = res
+            
             # If receiver is online but no active child devices are reporting,
             # return a placeholder representing the connected receiver itself.
-            return BatteryResult(
-                percent=None,
-                voltage_mv=0,
-                charging=False,
-                feature_used="receiver",
-            )
+            if not results:
+                receiver_name = self.supported_devices.get((0x046D, pid), "Logitech Receiver")
+                results[0xFF] = BatteryResult(
+                    percent=None,
+                    voltage_mv=0,
+                    charging=False,
+                    feature_used="receiver",
+                    device_name=receiver_name,
+                )
+            return results
         else:
-            return battery_probe_chain(handle, dev_idx)
+            res = battery_probe_chain(handle, dev_idx)
+            if res is not None:
+                res.device_name = self.supported_devices.get((0x046D, pid), "G Pro X Wireless")
+            return res
 
     def close_device(self, handle) -> None:
         try:
