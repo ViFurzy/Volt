@@ -217,15 +217,21 @@ class SidebarNav(QWidget):
         matched_name = None
         if isinstance(key, str) and key.startswith("hid:"):
             parts = key.split(":")
-            if len(parts) == 3:
+            if len(parts) >= 3:
                 try:
                     vid = int(parts[1], 16)
                     pid = int(parts[2], 16)
+                    idx = int(parts[3], 16) if len(parts) == 4 else 0xFF
                     for k, btn in self._device_buttons.items():
-                        if isinstance(k, tuple) and len(k) == 3 and k[0] == vid and k[1] == pid:
+                        if isinstance(k, tuple) and len(k) == 3 and k[0] == vid and k[1] == pid and k[2] == idx:
                             matched_key = k
                             matched_name = btn.text()
                             break
+                        # Fallback if idx doesn't strictly match but vid/pid do, 
+                        # in case the button was registered with a different idx
+                        elif isinstance(k, tuple) and len(k) == 3 and k[0] == vid and k[1] == pid and matched_key is None:
+                            matched_key = k
+                            matched_name = btn.text()
                 except Exception:
                     pass
         if matched_key is None and key in self._device_buttons:

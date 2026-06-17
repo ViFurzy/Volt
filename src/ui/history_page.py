@@ -20,7 +20,9 @@ class HistoryGraph(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setMinimumHeight(350)
+        self.setMinimumHeight(200)
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._history: list[dict] = []
         self._time_range: str = "all"
 
@@ -55,10 +57,10 @@ class HistoryGraph(QWidget):
         graph_w = w - margin_left - margin_right
         graph_h = h - margin_top - margin_bottom
 
-        # Grid lines (0%, 20%, 40%, 60%, 80%, 100%)
+        # Grid lines (0%, 25%, 50%, 75%, 100%)
         grid_font = QFont("Segoe UI", 9)
         p.setFont(grid_font)
-        for pct in (0, 20, 40, 60, 80, 100):
+        for pct in (0, 25, 50, 75, 100):
             y = margin_top + graph_h - (pct * graph_h // 100)
             
             # Grid line
@@ -69,7 +71,7 @@ class HistoryGraph(QWidget):
             p.drawLine(margin_left, y, w - margin_right, y)
             
             # Label
-            p.setPen(QColor("#888899"))
+            p.setPen(QColor("#555566"))
             p.drawText(
                 margin_left - 45, y - 8, 40, 16,
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -154,30 +156,30 @@ class HistoryGraph(QWidget):
             points = [points[idx] for idx in sorted_indices]
             history_sorted = [self._history[idx] for idx in sorted_indices]
 
-            # Draw line chart and gradient fill using smooth bezier curves
+            # Draw line chart and gradient fill
             if len(points) >= 1:
+                # Determine colors based on latest battery level, or use a premium blue/purple theme
+                # Let's use a sleek modern neon blue to purple gradient
+                theme_color1 = QColor("#7B9FFF") # Neon Blue
+                theme_color2 = QColor("#B67BFF") # Purple
+                
                 # ── Gradient Fill Area ──
                 fill_path = QPainterPath()
                 fill_path.moveTo(points[0].x(), margin_top + graph_h)
                 fill_path.lineTo(points[0])
-                for i in range(len(points) - 1):
-                    p0 = points[i]
-                    p1 = points[i+1]
-                    cx = (p0.x() + p1.x()) / 2
-                    fill_path.cubicTo(cx, p0.y(), cx, p1.y(), p1.x(), p1.y())
+                for pt in points[1:]:
+                    fill_path.lineTo(pt)
                 fill_path.lineTo(points[-1].x(), margin_top + graph_h)
                 fill_path.closeSubpath()
                 
-                # Fill with horizontal gradient (transitions colors based on battery levels)
+                # Fill with horizontal gradient
                 fill_grad = QLinearGradient(margin_left, 0, w - margin_right, 0)
-                for i, pt in enumerate(points):
-                    pct = history_sorted[i]["percent"]
-                    color = self._get_battery_color(pct)
-                    pos = (pt.x() - margin_left) / graph_w if graph_w > 0 else 0.5
-                    pos = max(0.0, min(1.0, pos))
-                    c = QColor(color)
-                    c.setAlpha(120)  # semi-transparent
-                    fill_grad.setColorAt(pos, c)
+                c1_fill = QColor(theme_color1)
+                c1_fill.setAlpha(80)
+                c2_fill = QColor(theme_color2)
+                c2_fill.setAlpha(80)
+                fill_grad.setColorAt(0.0, c1_fill)
+                fill_grad.setColorAt(1.0, c2_fill)
                 p.fillPath(fill_path, fill_grad)
 
                 # Mask/Overlay vertical gradient to fade to dark theme background (#202026 / RGB 32,32,38)
@@ -189,38 +191,48 @@ class HistoryGraph(QWidget):
                 # ── Curve Line ──
                 line_path = QPainterPath()
                 line_path.moveTo(points[0])
-                for i in range(len(points) - 1):
-                    p0 = points[i]
-                    p1 = points[i+1]
-                    cx = (p0.x() + p1.x()) / 2
-                    line_path.cubicTo(cx, p0.y(), cx, p1.y(), p1.x(), p1.y())
+                for pt in points[1:]:
+                    line_path.lineTo(pt)
                 
                 line_grad = QLinearGradient(margin_left, 0, w - margin_right, 0)
-                for i, pt in enumerate(points):
-                    pct = history_sorted[i]["percent"]
-                    color = self._get_battery_color(pct)
-                    pos = (pt.x() - margin_left) / graph_w if graph_w > 0 else 0.5
-                    pos = max(0.0, min(1.0, pos))
-                    line_grad.setColorAt(pos, QColor(color))
+                line_grad.setColorAt(0.0, theme_color1)
+                line_grad.setColorAt(1.0, theme_color2)
 
-                line_pen = QPen(QBrush(line_grad), 3.0)
-                line_pen.setWidthF(3.0)
-                line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-                line_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                p.setPen(line_pen)
-                p.drawPath(line_path)
+                # Glow effect: draw multiple times with decreasing width and increasing opacity
+                glow_widths = [6.0, 3.0, 1.5]
+                glow_alphas = [40, 120, 255]
+                
+                for gw, ga in zip(glow_widths, glow_alphas):
+                    glow_color1 = QColor(theme_color1)
+                    glow_color1.setAlpha(ga)
+                    glow_color2 = QColor(theme_color2)
+                    glow_color2.setAlpha(ga)
+                    
+                    glow_grad = QLinearGradient(margin_left, 0, w - margin_right, 0)
+                    glow_grad.setColorAt(0.0, glow_color1)
+                    glow_grad.setColorAt(1.0, glow_color2)
+                    
+                    line_pen = QPen(QBrush(glow_grad), gw)
+                    line_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    line_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                    p.setPen(line_pen)
+                    p.drawPath(line_path)
 
-                # ── Dots at Data Points ──
-                for i, pt in enumerate(points):
-                    pct = history_sorted[i]["percent"]
-                    color = self._get_battery_color(pct)
-                    # Outer dot border (page bg color)
-                    p.setBrush(QColor(32, 32, 38))
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.drawEllipse(pt, 5, 5)
-                    # Inner dot (battery level color)
-                    p.setBrush(QColor(color))
-                    p.drawEllipse(pt, 3, 3)
+                # ── Dot only at the latest Data Point ──
+                last_pt = points[-1]
+                
+                # Outer glow
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(theme_color2.red(), theme_color2.green(), theme_color2.blue(), 80))
+                p.drawEllipse(last_pt, 8, 8)
+                
+                # Outer border
+                p.setBrush(QColor(32, 32, 38))
+                p.drawEllipse(last_pt, 5, 5)
+                
+                # Inner dot
+                p.setBrush(theme_color2)
+                p.drawEllipse(last_pt, 3, 3)
 
         # Draw X-axis labels
         p.setPen(QColor("#888899"))
