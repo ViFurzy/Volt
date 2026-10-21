@@ -1,6 +1,12 @@
+; Version comes from src/__version__.py via build.py (/DAppVer=...); default is a fallback.
+#ifndef AppVer
+  #define AppVer "0.5.2"
+#endif
+
 [Setup]
 AppName=Volt
-AppVersion=0.5.1
+AppVersion={#AppVer}
+CloseApplications=yes
 
 AppPublisher=Volt Open Source
 DefaultDirName={autopf}\Volt

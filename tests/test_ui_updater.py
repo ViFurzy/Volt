@@ -88,7 +88,7 @@ def test_mainwindow_update_check_available(qapp, mocker, tmp_path, monkeypatch):
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "tag_name": "v0.5.2",
+        "tag_name": "v99.0.0",
         "assets": [{"name": "Volt_Installer.exe", "browser_download_url": "http://example.com/download"}]
     }
     mocker.patch("ui.updater.requests.get", return_value=mock_response)
@@ -110,7 +110,7 @@ def test_mainwindow_update_check_available(qapp, mocker, tmp_path, monkeypatch):
     QCoreApplication.processEvents()
 
     assert window._update_state == "update_available"
-    assert window._latest_version == "0.5.2"
+    assert window._latest_version == "99.0.0"
     assert window._latest_url == "http://example.com/download"
     assert "Update Available" in window._sidebar._version_btn.text()
 

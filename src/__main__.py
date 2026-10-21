@@ -37,7 +37,7 @@ def _on_bt_device_update(window: MainWindow, notif_manager: NotificationManager,
 def main() -> None:
     import ctypes
     try:
-        myappid = 'vifurzy.volt.powercenter.0.4.0'
+        myappid = 'vifurzy.volt.powercenter'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except AttributeError:
         pass

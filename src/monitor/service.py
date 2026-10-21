@@ -15,6 +15,7 @@ Architecture invariants (from CLAUDE.md):
 
 import asyncio
 import concurrent.futures
+import logging
 import queue
 import threading
 from collections import deque
@@ -27,6 +28,8 @@ import monitor.bt_backend as bt_backend
 from monitor.registry import DeviceRegistry
 from monitor.state import KNOWN_DEVICES, DeviceState, DeviceStatus, BtDeviceInfo, BtScanResultEvent
 from ui.settings_manager import load_config, save_config
+
+logger = logging.getLogger(__name__)
 
 
 class MonitorService:
@@ -186,7 +189,7 @@ class MonitorService:
                                 connected = bool(bt_backend._get_winrt_prop(d_info.properties, "System.Devices.Aep.IsConnected"))
                                 container_id = bt_backend._get_winrt_prop(d_info.properties, "System.Devices.Aep.ContainerId")
                         except Exception:
-                            pass
+                            logger.warning("BT connection lookup failed for %s", bt_id, exc_info=True)
 
                         battery = None
                         if container_id:
@@ -248,7 +251,7 @@ class MonitorService:
                         self._voltage_history.pop(child_key, None)
                         self._registry.mark_offline(child_key)
                     except Exception:
-                        pass
+                        logger.warning("Failed to mark child device offline", exc_info=True)
             else:
                 self._bt_devices.pop(device_id, None)
         self._loop.call_soon_threadsafe(_do)
@@ -356,7 +359,7 @@ class MonitorService:
                                             if res.percent != 0:
                                                 battery_val = res.percent
                                 except Exception:
-                                    pass
+                                    logger.warning("HID battery probe failed during scan", exc_info=True)
 
                         if not any(d["id"] == hid_id for d in hid_devices):
                             hid_devices.append({
@@ -367,7 +370,7 @@ class MonitorService:
                                 "connected": True,
                             })
         except Exception:
-            pass
+            logger.warning("Device scan failed", exc_info=True)
 
         self._ui_queue.put(BtScanResultEvent(devices=bt_devices + hid_devices))
 
@@ -499,7 +502,7 @@ class MonitorService:
                             self._registry.upsert(state)
                             self._ui_queue.put(state)
                     except Exception:
-                        pass
+                        logger.warning("Failed to register offline device state", exc_info=True)
 
         # Load persisted BT devices from config and register them for polling (BT-04).
         # These don't get opened like HID devices; they are polled via resolve_battery().
@@ -532,7 +535,7 @@ class MonitorService:
                     connected = bool(bt_backend._get_winrt_prop(d_info.properties, "System.Devices.Aep.IsConnected"))
                     container_id = bt_backend._get_winrt_prop(d_info.properties, "System.Devices.Aep.ContainerId")
             except Exception:
-                pass
+                logger.warning("BT connection lookup failed for %s", bt_id, exc_info=True)
 
             battery = None
             if container_id:

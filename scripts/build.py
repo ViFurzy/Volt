@@ -31,7 +31,9 @@ def main():
         print("\nTo build the installer, you need Inno Setup.")
         print("1. Install Inno Setup (https://jrsoftware.org/isinfo.php)")
         print(f"2. Right-click on 'scripts/installer.iss' and select 'Compile', OR run:")
-        print(f"   \"%LOCALAPPDATA%\\Programs\\Inno Setup 6\\ISCC.exe\" scripts\\installer.iss")
+        sys.path.insert(0, str(project_root / "src"))
+        from __version__ import __version__
+        print(f"   \"%LOCALAPPDATA%\\Programs\\Inno Setup 6\\ISCC.exe\" /DAppVer={__version__} scripts\\installer.iss")
     except subprocess.CalledProcessError as e:
         print(f"\nBuild failed with error code {e.returncode}")
         sys.exit(e.returncode)

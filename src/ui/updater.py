@@ -1,5 +1,4 @@
 import os
-import sys
 import tempfile
 import threading
 import subprocess
@@ -7,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Callable
 
 import requests
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QMetaObject, QObject, Qt, Signal
 
 from __version__ import __version__
 
@@ -101,8 +100,11 @@ class UpdaterWorker(QObject):
                     creationflags=subprocess.CREATE_NO_WINDOW | 0x00000008 # DETACHED_PROCESS
                 )
                 
-                # Exit the app so installer can overwrite files
-                sys.exit(0)
+                # Exit the app so installer can overwrite files. sys.exit() in a
+                # worker thread only ends that thread, so quit from the GUI thread.
+                app = QCoreApplication.instance()
+                if app is not None:
+                    QMetaObject.invokeMethod(app, "quit", Qt.ConnectionType.QueuedConnection)
             except Exception as e:
                 try:
                     self.error.emit(f"Download failed: {str(e)}")
