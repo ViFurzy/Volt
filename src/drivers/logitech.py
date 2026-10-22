@@ -19,24 +19,33 @@ def get_feature_index(device, device_idx: int, feature_id: int) -> int | None:
         pass
     return None
 
+# Unified Battery (0x1004) level bitmask -> rough percent, for devices without state-of-charge
+_UNIFIED_LEVEL_PCT = {0x01: 5, 0x02: 20, 0x04: 50, 0x08: 90}  # critical / low / good / full
+
+
 def query_hidpp20_battery(device, device_idx: int) -> BatteryResult | None:
-    # Try modern feature 0x1004 (Unified Battery), then fallback to legacy 0x1000 (Battery status)
-    for feature_id in (0x1004, 0x1000):
+    # Modern 0x1004 (Unified Battery) first, then legacy 0x1000 (Battery Status).
+    # Status command byte: 0x1004 GetStatus is function 1 (0x10), 0x1000 GetBatteryLevelStatus
+    # is function 0. Both answer params [percent, level/next level, charging status], i.e.
+    # resp[4], resp[5], resp[6].
+    # Charging states: 1 charging, 2 slow/final stage, 3 complete, and (0x1000 only) 4 slow recharge.
+    for feature_id, function, charging_states in (
+        (0x1004, 0x10, (0x01, 0x02, 0x03)),
+        (0x1000, 0x00, (0x01, 0x02, 0x03, 0x04)),
+    ):
         feat_idx = get_feature_index(device, device_idx, feature_id)
         if feat_idx is not None:
-            # Command: GetBatteryLevelStatus / GetBatteryStatus (func 0)
-            cmd = [0x10, device_idx, feat_idx, 0x00, 0x00, 0x00, 0x00]
+            cmd = [0x10, device_idx, feat_idx, function, 0x00, 0x00, 0x00]
             try:
-                resp = send_and_recv(device, cmd, min_len=6)
+                resp = send_and_recv(device, cmd, min_len=7)
                 if resp:
-                    level = resp[4]
-                    status = resp[5]
-                    # Map charging status (1=recharging, 2=charge in final stage, 3=complete, 4=slow recharge)
-                    charging = status in (0x01, 0x02, 0x03, 0x04)
+                    percent = resp[4]
+                    if feature_id == 0x1004 and percent == 0:
+                        percent = _UNIFIED_LEVEL_PCT.get(resp[5], 0)
                     return BatteryResult(
-                        percent=level,
+                        percent=percent,
                         voltage_mv=0,
-                        charging=charging,
+                        charging=resp[6] in charging_states,
                         feature_used=hex(feature_id),
                     )
             except Exception:

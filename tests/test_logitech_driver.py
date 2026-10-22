@@ -35,55 +35,63 @@ def test_logitech_driver_find_devices():
         assert 0x0ABA in pids
 
 
-def test_probe_battery_receiver_success_1004():
+def _probe_receiver(feature_id: int, feat_idx: int, function: int, reply: list[int]):
+    """Probe device channel 1 behind a Bolt receiver.
+
+    The device only answers `function` on its battery feature; any other function
+    (e.g. 0x1004 GetCapabilities = 0x00) gets no reply, like a wrong call would.
+    """
     driver = LogitechDriver()
-    # Bolt Receiver is 0xC548 (starts with 0xC5)
-    handle = {"path": b"/dev/hid0", "product_id": 0xC548}
-    
-    def mock_send_recv_side_effect(device, msg, *args, **kwargs):
-        device_idx = msg[1]
-        if device_idx == 1:
-            if msg[2] == 0x00:  # GetFeature index query
-                feature_id = (msg[4] << 8) | msg[5]
-                if feature_id == 0x1004:
-                    return [0x10, 1, 0, 0, 2, 0, 0]  # feature index 2
-            elif msg[2] == 2:  # GetBatteryStatus on feature index 2
-                return [0x10, 1, 2, 0, 80, 1, 0]
+    handle = {"path": b"/dev/hid0", "product_id": 0xC548}  # Bolt receiver
+
+    def send_recv(device, msg, *args, **kwargs):
+        if msg[1] != 1:
+            return None
+        if msg[2] == 0x00:  # Root.GetFeature
+            if (msg[4] << 8) | msg[5] == feature_id:
+                return [0x10, 1, 0, 0, feat_idx, 0, 0]
+        elif msg[2] == feat_idx and msg[3] == function:
+            return reply
         return None
 
-    with patch("drivers.logitech.send_and_recv", side_effect=mock_send_recv_side_effect):
-        res = driver.probe_battery(handle, 0xFF)
-        assert res is not None
-        assert isinstance(res, dict)
-        assert 1 in res
-        assert res[1].percent == 80
-        assert res[1].charging is True
-        assert res[1].feature_used == "0x1004"
+    with patch("drivers.logitech.send_and_recv", side_effect=send_recv):
+        return driver.probe_battery(handle, 0xFF)
+
+
+def test_probe_battery_receiver_success_1004():
+    # GetStatus = function 1 (0x10); params: 80%, level "good", status 1 = charging
+    res = _probe_receiver(0x1004, 2, 0x10, [0x10, 1, 2, 0x10, 80, 0x04, 0x01])
+    assert isinstance(res, dict)
+    assert res[1].percent == 80
+    assert res[1].charging is True
+    assert res[1].feature_used == "0x1004"
+
+
+def test_probe_battery_1004_level_byte_is_not_charging():
+    # Status (resp[6]) 0 = discharging, even though the level byte (resp[5]) is non-zero
+    res = _probe_receiver(0x1004, 2, 0x10, [0x10, 1, 2, 0x10, 80, 0x04, 0x00])
+    assert res[1].percent == 80
+    assert res[1].charging is False
+
+
+def test_probe_battery_1004_without_state_of_charge_uses_level():
+    # Device reports only the level bitmask (0x02 = low) and 0% state of charge
+    res = _probe_receiver(0x1004, 2, 0x10, [0x10, 1, 2, 0x10, 0, 0x02, 0x00])
+    assert res[1].percent == 20
 
 
 def test_probe_battery_receiver_fallback_1000():
-    driver = LogitechDriver()
-    handle = {"path": b"/dev/hid0", "product_id": 0xC548}
-    
-    def mock_send_recv_side_effect(device, msg, *args, **kwargs):
-        device_idx = msg[1]
-        if device_idx == 1:
-            if msg[2] == 0x00:
-                feature_id = (msg[4] << 8) | msg[5]
-                if feature_id == 0x1000:
-                    return [0x10, 1, 0, 0, 3, 0, 0]  # feature index 3
-            elif msg[2] == 3:
-                return [0x10, 1, 3, 0, 50, 0, 0]
-        return None
+    # GetBatteryLevelStatus = function 0; params: 50%, next level 20%, status 0
+    res = _probe_receiver(0x1000, 3, 0x00, [0x10, 1, 3, 0x00, 50, 20, 0x00])
+    assert isinstance(res, dict)
+    assert res[1].percent == 50
+    assert res[1].charging is False
+    assert res[1].feature_used == "0x1000"
 
-    with patch("drivers.logitech.send_and_recv", side_effect=mock_send_recv_side_effect):
-        res = driver.probe_battery(handle, 0xFF)
-        assert res is not None
-        assert isinstance(res, dict)
-        assert 1 in res
-        assert res[1].percent == 50
-        assert res[1].charging is False
-        assert res[1].feature_used == "0x1000"
+
+def test_probe_battery_1000_charging_status_is_resp6():
+    res = _probe_receiver(0x1000, 3, 0x00, [0x10, 1, 3, 0x00, 50, 0, 0x01])
+    assert res[1].charging is True
 
 
 def test_probe_battery_receiver_all_offline():
