@@ -1,13 +1,12 @@
 import hid
 from .base import BaseDriver
+from .table import devices_for
 from hidpp.features import BatteryResult
 
 class GenericDriver(BaseDriver):
     @property
     def supported_devices(self) -> dict[tuple[int, int], str]:
-        devices = {
-            (0x258A, 0x0150): "SinoWealth Gaming KB",
-        }
+        devices = devices_for("generic")
         # Include custom generic devices from config
         try:
             from ui.settings_manager import load_config
@@ -29,7 +28,7 @@ class GenericDriver(BaseDriver):
         return 0x00
 
     def find_devices(self, verbose: bool = False) -> list[dict]:
-        targets = {(0x258A, 0x0150)}
+        targets = set(devices_for("generic"))
         try:
             from ui.settings_manager import load_config
             from drivers import _parse_id

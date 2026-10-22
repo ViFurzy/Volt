@@ -1,5 +1,6 @@
 import hid
 from .base import BaseDriver
+from .table import devices_for, vendor_ids
 from hidpp.receiver import DEVICE_IDX, open_receiver
 from hidpp.features import battery_probe_chain, BatteryResult
 from hidpp.protocol import send_and_recv
@@ -65,21 +66,14 @@ def query_device_name(device, device_idx: int) -> str | None:
 class LogitechDriver(BaseDriver):
     @property
     def supported_devices(self) -> dict[tuple[int, int], str]:
-        return {
-            (0x046D, 0x0ABA): "G Pro X Wireless",
-            (0x046D, 0xC548): "Logitech Bolt Receiver",
-            (0x046D, 0xC52B): "Logitech Unifying Receiver",
-            (0x046D, 0xC53F): "Logitech Lightspeed Receiver",
-            (0x046D, 0xC534): "Logitech Nano Receiver",
-            (0x046D, 0xC52F): "Logitech Nano Receiver",
-        }
+        return devices_for("logitech")
 
     @property
     def dev_idx(self) -> int:
         return DEVICE_IDX
 
     def find_devices(self, verbose: bool = False) -> list[dict]:
-        vids = {0x046D}
+        vids = vendor_ids("logitech")
         try:
             from ui.settings_manager import load_config
             cfg = load_config()

@@ -1,0 +1,17 @@
+{
+  "vendors": {
+    "0x046D": "logitech",
+    "0x1038": "steelseries",
+    "0x258A": "generic"
+  },
+  "devices": [
+    {"vid": "0x046D", "pid": "0x0ABA", "name": "G Pro X Wireless", "driver": "logitech"},
+    {"vid": "0x046D", "pid": "0xC548", "name": "Logitech Bolt Receiver", "driver": "logitech"},
+    {"vid": "0x046D", "pid": "0xC52B", "name": "Logitech Unifying Receiver", "driver": "logitech"},
+    {"vid": "0x046D", "pid": "0xC53F", "name": "Logitech Lightspeed Receiver", "driver": "logitech"},
+    {"vid": "0x046D", "pid": "0xC534", "name": "Logitech Nano Receiver", "driver": "logitech"},
+    {"vid": "0x046D", "pid": "0xC52F", "name": "Logitech Nano Receiver", "driver": "logitech"},
+    {"vid": "0x1038", "pid": "0x1852", "name": "Aerox 5 Wireless", "driver": "steelseries"},
+    {"vid": "0x258A", "pid": "0x0150", "name": "SinoWealth Gaming KB", "driver": "generic"}
+  ]
+}

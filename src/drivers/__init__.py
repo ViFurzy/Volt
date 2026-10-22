@@ -1,6 +1,7 @@
 from .logitech import LogitechDriver
 from .steelseries import SteelSeriesDriver
 from .generic import GenericDriver
+from .table import driver_for_vendor
 
 _DRIVERS = [
     LogitechDriver(),
@@ -121,16 +122,9 @@ def get_driver_for_device(vid: int, pid: int):
         if (vid, pid) in d.supported_devices:
             return d
 
-    # Fallback to driver by VID if not explicitly matched
-    if vid == 0x046D:
-        from .logitech import LogitechDriver
-        return LogitechDriver()
-    elif vid == 0x1038:
-        from .steelseries import SteelSeriesDriver
-        return SteelSeriesDriver()
-    elif vid == 0x258A:
-        from .generic import GenericDriver
-        return GenericDriver()
-
-    from .generic import GenericDriver
+    # Fallback to driver by VID if not explicitly matched, else the generic driver
+    name = driver_for_vendor(vid) or "generic"
+    for d in get_all_drivers():
+        if d.__class__.__name__.lower().startswith(name):
+            return d
     return GenericDriver()

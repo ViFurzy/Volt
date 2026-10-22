@@ -5,6 +5,7 @@ import tempfile
 import glob
 
 from .base import BaseDriver
+from .table import devices_for, vendor_ids
 from steelseries.driver import SS_DEVICE_IDX, find_dongle, open_dongle, ss_battery_probe
 from hidpp.features import BatteryResult
 
@@ -160,9 +161,7 @@ class SteelSeriesDriver(BaseDriver):
     @property
     def supported_devices(self) -> dict[tuple[int, int], str]:
         if SteelSeriesDriver._cached_supported_devices is None:
-            devices = {
-                (0x1038, 0x1852): "Aerox 5 Wireless",
-            }
+            devices = devices_for("steelseries")
             try:
                 devices.update(load_devices_from_db())
             except Exception:
@@ -175,7 +174,7 @@ class SteelSeriesDriver(BaseDriver):
         return SS_DEVICE_IDX
 
     def find_devices(self, verbose: bool = False) -> list[dict]:
-        vids = {0x1038}
+        vids = vendor_ids("steelseries")
         try:
             from ui.settings_manager import load_config
             cfg = load_config()
