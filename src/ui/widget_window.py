@@ -7,7 +7,9 @@ Layout modes:
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QRectF, Signal
+import math
+
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import QPainter, QPen, QColor, QBrush, QFont
 from PySide6.QtWidgets import (
     QFrame,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
 )
 
+from ui import theme
 from ui.settings_manager import get_device_battery_color, load_config, save_config
 
 
@@ -43,12 +46,12 @@ def get_device_category(name: str) -> str:
 
 def get_ring_color(percent: int | None, charging: bool, offline: bool) -> str:
     """Return the color used in the circular rings for consistency across layouts."""
-    if offline: return "#555566"
-    if charging: return "#4FC3F7"
-    if percent is None: return "#555566"
-    if percent <= 8: return "#EE6800"
-    if percent <= 45: return "#F0BB66"
-    return "#4CAF50"
+    if offline: return theme.c("#555566")
+    if charging: return theme.c("#4FC3F7")
+    if percent is None: return theme.c("#555566")
+    if percent <= 8: return theme.c("#EE6800")
+    if percent <= 45: return theme.c("#F0BB66")
+    return theme.c("#4CAF50")
 
 
 def draw_device_icon(p: QPainter, category: str, cx: float, cy: float, sz: float, color: str) -> None:
@@ -94,6 +97,45 @@ def draw_device_icon(p: QPainter, category: str, cx: float, cy: float, sz: float
         p.drawLine(cx + int(sc(4)), cy + int(sc(6)), cx, cy + int(sc(2)))
 
 
+def _num_font() -> str:
+    """QSS snippet putting numerals in the Doto display face (dot-matrix style only)."""
+    return f'font-family: "{theme.display_font()}"; ' if theme.is_dots() else ""
+
+
+class DotBar(QWidget):
+    """Row of dots standing in for QProgressBar in the dot-matrix style."""
+    N = 10
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._value = 0
+        self._color = "#FFFFFF"
+
+    def setValue(self, v: int) -> None:
+        self._value = v
+        self.update()
+
+    def set_color(self, color: str) -> None:
+        self._color = color
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        step = self.width() / self.N
+        r = min(step, self.height()) * 0.35
+        on = round(self._value * self.N / 100)
+        for i in range(self.N):
+            if i < on:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(self._color))
+            else:
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(QColor(theme.c("#2A2A3A")), 1))
+            p.drawEllipse(QPointF(step * (i + 0.5), self.height() / 2.0), r, r)
+        p.end()
+
+
 class MiniBatteryRing(QWidget):
     """Mini circular battery ring gauge for iPhone-like widget mode.
 
@@ -134,24 +176,42 @@ class MiniBatteryRing(QWidget):
         m = self.stroke // 2 + 2
         rect = QRectF(m, m, sz - 2 * m, sz - 2 * m)
 
-        # Background track
-        bg_pen = QPen(QColor("#2a2a3a"))
-        bg_pen.setWidth(self.stroke)
-        bg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(bg_pen)
-        p.drawArc(rect, 0, 360 * 16)
-
-        # Filled arc (battery level)
         color = self._arc_color()
-        fill_pen = QPen(QColor(color))
-        fill_pen.setWidth(self.stroke)
-        fill_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(fill_pen)
-
         pct = self._percent if self._percent is not None else 0
-        fill_span = int(-360 * 16 * pct / 100)
-        if fill_span != 0:
-            p.drawArc(rect, 90 * 16, fill_span)
+
+        if theme.is_dots():
+            # Ring of 20 dots, filled clockwise from 12 o'clock
+            n = 20
+            on = 0 if self._offline else round(pct * n / 100)
+            r = rect.width() / 2.0
+            dot_r = max(1.0, self.stroke * 0.45)
+            for i in range(n):
+                a = 2 * math.pi * i / n - math.pi / 2
+                pt = QPointF(rect.center().x() + r * math.cos(a), rect.center().y() + r * math.sin(a))
+                if i < on:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QColor(color))
+                else:
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.setPen(QPen(QColor(theme.c("#2a2a3a")), 1))
+                p.drawEllipse(pt, dot_r, dot_r)
+        else:
+            # Background track
+            bg_pen = QPen(QColor(theme.c("#2a2a3a")))
+            bg_pen.setWidth(self.stroke)
+            bg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(bg_pen)
+            p.drawArc(rect, 0, 360 * 16)
+
+            # Filled arc (battery level)
+            fill_pen = QPen(QColor(color))
+            fill_pen.setWidth(self.stroke)
+            fill_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            p.setPen(fill_pen)
+
+            fill_span = int(-360 * 16 * pct / 100)
+            if fill_span != 0:
+                p.drawArc(rect, 90 * 16, fill_span)
 
         # Center vector icon
         cx, cy = sz / 2.0, sz / 2.0
@@ -198,8 +258,9 @@ class VerticalBlockRowUI(QWidget):
         rect = self.rect()
 
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#1e1e28"))
-        p.drawRoundedRect(rect, 6 * scale, 6 * scale)
+        dots = theme.is_dots()
+        p.setBrush(QColor(theme.c("#1e1e28")))
+        p.drawRoundedRect(rect, 0 if dots else 6 * scale, 0 if dots else 6 * scale)
 
         bar_w = 6 * scale
         bar_margin = 4 * scale
@@ -207,27 +268,55 @@ class VerticalBlockRowUI(QWidget):
         bar_y = bar_margin
         bar_h = rect.height() - 2 * bar_margin
         
-        p.setBrush(QColor("#14141d"))
-        p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, bar_h), bar_w/2.0, bar_w/2.0)
-
         fill_pct = self._anim_val if self._charging else (self._percent if self._percent is not None else 0)
-        if not self._offline and fill_pct > 0:
-            fill_h = bar_h * (min(100.0, float(fill_pct)) / 100.0)
-            fill_y = bar_y + bar_h - fill_h
-            p.setBrush(QColor(color))
-            p.drawRoundedRect(QRectF(bar_x, fill_y, bar_w, fill_h), bar_w/2.0, bar_w/2.0)
+        if dots:
+            # Column of 10 dots, filled from the bottom
+            n = 10
+            on = 0 if self._offline else round(min(100.0, float(fill_pct)) * n / 100)
+            step = bar_h / n
+            dot_r = min(bar_w, step) * 0.42
+            for i in range(n):
+                pt = QPointF(bar_x + bar_w / 2.0, bar_y + bar_h - step * (i + 0.5))
+                if i < on:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QColor(color))
+                else:
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.setPen(QPen(QColor(theme.c("#2a2a3a")), 1))
+                p.drawEllipse(pt, dot_r, dot_r)
+            p.setPen(Qt.PenStyle.NoPen)
+        else:
+            p.setBrush(QColor(theme.c("#14141d")))
+            p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, bar_h), bar_w/2.0, bar_w/2.0)
+            if not self._offline and fill_pct > 0:
+                fill_h = bar_h * (min(100.0, float(fill_pct)) / 100.0)
+                fill_y = bar_y + bar_h - fill_h
+                p.setBrush(QColor(color))
+                p.drawRoundedRect(QRectF(bar_x, fill_y, bar_w, fill_h), bar_w/2.0, bar_w/2.0)
 
         icon_sz = 44 * scale
         cx = bar_x + bar_w + (rect.width() - (bar_x + bar_w)) / 2.0
         cy = bar_y + icon_sz / 2.0 + 2 * scale
-        draw_device_icon(p, self._category, cx, cy, icon_sz, color if (not self._offline and self._percent is not None) else "#555566")
+        live = not self._offline and self._percent is not None
+        if dots:
+            # Big Doto numerals take the place of the icon
+            num_font = QFont(theme.display_font())
+            num_font.setPixelSize(max(10, int(34 * scale)))
+            num_font.setWeight(QFont.Weight.Black)
+            num_font.setStyleStrategy(QFont.StyleStrategy.NoSubpixelAntialias)
+            p.setFont(num_font)
+            p.setPen(QColor(color if live else theme.c("#555566")))
+            num_rect = QRectF(bar_x + bar_w, bar_y, rect.width() - (bar_x + bar_w), icon_sz + 4 * scale)
+            p.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, f"{self._percent:02d}" if live else "--")
+        else:
+            draw_device_icon(p, self._category, cx, cy, icon_sz, color if live else theme.c("#555566"))
 
-        p.setPen(QColor("#FFFFFF") if not self._offline else QColor("#555566"))
-        font = QFont()
+        p.setPen(QColor(theme.c("#FFFFFF")) if not self._offline else QColor(theme.c("#555566")))
+        font = QFont(theme.family())
         font.setPointSize(max(7, int(9 * scale)))
         p.setFont(font)
-        
-        display_name = self._name
+
+        display_name = self._name.upper() if dots else self._name
         if len(display_name) > 10:
             display_name = display_name[:8] + ".."
         
@@ -244,9 +333,12 @@ class MinimalListRowUI(QWidget):
         
         self._name_lbl = QLabel()
         self._pct_lbl = QLabel()
-        self._bar = QProgressBar()
-        self._bar.setTextVisible(False)
-        self._bar.setRange(0, 100)
+        if theme.is_dots():
+            self._bar = DotBar()
+        else:
+            self._bar = QProgressBar()
+            self._bar.setTextVisible(False)
+            self._bar.setRange(0, 100)
         
         layout.addWidget(self._name_lbl, 1)
         layout.addWidget(self._pct_lbl)
@@ -263,13 +355,14 @@ class MinimalListRowUI(QWidget):
         name_font_sz = max(6, int(9 * scale))
         pct_font_sz = max(6, int(9 * scale))
 
-        display_name = name
-        if len(display_name) > 18:
-            display_name = display_name[:16] + ".."
+        display_name = name.upper() if theme.is_dots() else name
+        limit = 13 if theme.is_dots() else 18  # wide mono caps need room for the % label
+        if len(display_name) > limit:
+            display_name = display_name[:limit - 2] + ".."
 
         if percent is not None and not offline:
             self._pct_lbl.setText(f"{percent}%")
-            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: {color};")
+            self._pct_lbl.setStyleSheet(f"{_num_font()}font-size: {pct_font_sz}pt; font-weight: bold; color: {color};")
             self._name_lbl.setText(display_name)
             self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; font-weight: bold; color: #FFFFFF;")
             if not charging:
@@ -281,16 +374,22 @@ class MinimalListRowUI(QWidget):
             self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; font-weight: bold; color: #555566;")
             self._bar.setValue(0)
             
-        self._bar.setStyleSheet(f"""
-            QProgressBar {{ background-color: #2a2a3a; border: none; border-radius: {max(2, int(4*scale))}px; }}
-            QProgressBar::chunk {{ background-color: {color}; border-radius: {max(2, int(4*scale))}px; }}
-        """)
+        if theme.is_dots():
+            self._bar.set_color(color if percent is not None and not offline else theme.c("#555566"))
+        else:
+            self._bar.setStyleSheet(f"""
+                QProgressBar {{ background-color: #2a2a3a; border: none; border-radius: {max(2, int(4*scale))}px; }}
+                QProgressBar::chunk {{ background-color: {color}; border-radius: {max(2, int(4*scale))}px; }}
+            """)
 
     def apply_scale(self, scale):
         self._scale = scale
         self.setFixedHeight(int(28 * scale))
         self.layout().setContentsMargins(int(12 * scale), int(4 * scale), int(12 * scale), int(4 * scale))
-        self._bar.setFixedSize(int(32 * scale), int(12 * scale))
+        if theme.is_dots():
+            self._bar.setFixedSize(int(60 * scale), int(10 * scale))
+        else:
+            self._bar.setFixedSize(int(32 * scale), int(12 * scale))
 
 
 class HorizontalRingsRowUI(QWidget):
@@ -300,7 +399,8 @@ class HorizontalRingsRowUI(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self._container = QFrame()
-        self._container.setStyleSheet("background: #121218; border: 1px solid #2a2a3a; border-radius: 6px;")
+        radius = 0 if theme.is_dots() else 6
+        self._container.setStyleSheet(f"background: #121218; border: 1px solid #2a2a3a; border-radius: {radius}px;")
         
         c_layout = QHBoxLayout(self._container)
         
@@ -330,12 +430,13 @@ class HorizontalRingsRowUI(QWidget):
         pct_font_sz = max(6, int(8 * scale))
 
         display_name = name.upper()
-        if len(display_name) > 16:
-            display_name = display_name[:14] + ".."
+        limit = 12 if theme.is_dots() else 16
+        if len(display_name) > limit:
+            display_name = display_name[:limit - 2] + ".."
 
         if percent is not None and not offline:
             self._pct_lbl.setText(f"{percent}%")
-            self._pct_lbl.setStyleSheet(f"font-size: {pct_font_sz}pt; font-weight: bold; color: {color}; border: none; background: transparent;")
+            self._pct_lbl.setStyleSheet(f"{_num_font()}font-size: {pct_font_sz}pt; font-weight: bold; color: {color}; border: none; background: transparent;")
             self._name_lbl.setText(display_name)
             self._name_lbl.setStyleSheet(f"font-size: {name_font_sz}pt; color: #FFFFFF; border: none; background: transparent;")
         else:
@@ -577,9 +678,9 @@ class WidgetWindow(QWidget):
         opacity = cfg.get("widget_opacity", 0.95)
         self._container.setStyleSheet(f"""
             QFrame#widgetContainer {{
-                background-color: rgba(32, 32, 38, {opacity});
+                background-color: {theme.rgba("#202026", opacity)};
                 border: 1px solid #2a2a38;
-                border-radius: 0px;
+                border-radius: {0 if theme.is_dots() else 10}px;
             }}
         """)
 

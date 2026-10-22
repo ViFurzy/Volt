@@ -216,10 +216,10 @@ class MainWindow(QMainWindow):
 
         widget_btn = QPushButton("⊡")
         widget_btn.setFixedSize(30, 30)
-        widget_btn.setToolTip("Compact mode")
+        widget_btn.setToolTip("Show/hide widget")
         widget_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         widget_btn.setStyleSheet("QPushButton { background: transparent; color: #888899; border: none; font-size: 16px; border-radius: 4px; } QPushButton:hover { background: #333344; color: #7B9FFF; }")
-        widget_btn.clicked.connect(self.enter_widget_mode)
+        widget_btn.clicked.connect(self.toggle_widget)
 
         min_btn = QPushButton("—")
         min_btn.setFixedSize(30, 30)
@@ -432,6 +432,14 @@ class MainWindow(QMainWindow):
                     self._widget.update_device(
                         key, state.device_name, state.percent, False, is_offline
                     )
+
+    def toggle_widget(self) -> None:
+        """Show/hide the compact widget without touching the main window."""
+        if self._widget.isVisible():
+            self._widget.hide()
+            return
+        self.sync_widget()
+        self._widget.show()
 
     def enter_widget_mode(self) -> None:
         """Switch to compact widget."""

@@ -30,6 +30,23 @@ def test_widget_window_initial_state(qapp, mock_config):
     assert win._empty_lbl.isHidden() is False
 
 
+@pytest.mark.parametrize("style", ["inspector", "dotmatrix"])
+@pytest.mark.parametrize("mode", ["stack", "horizontal", "iphone"])
+def test_widget_renders_in_every_style_and_mode(qapp, mock_config, style, mode):
+    """Each style x layout mode builds and paints without error."""
+    from ui import theme
+    prev = theme.current()
+    theme.set_theme(style)
+    try:
+        save_config({"widget_layout_mode": mode})
+        win = WidgetWindow(exit_callback=lambda: None)
+        win.update_device((1,), "Aerox 5 Wireless", 75, False, False)
+        win.update_device((2,), "Arctis Nova 7", 19, True, False)
+        assert not win.grab().isNull()
+    finally:
+        theme.set_theme(prev)
+
+
 def test_widget_window_adds_horizontal_row(qapp, mock_config):
     """Verify that adding a device in default stack mode creates a VerticalBlockRowUI."""
     win = WidgetWindow(exit_callback=lambda: None)

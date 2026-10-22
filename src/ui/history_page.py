@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QButtonGroup, QPushButton, QFrame, QDialog
 )
 
+from ui import theme
 from ui.settings_manager import load_config, save_config
 from ui.device_card import BatteryGauge
 from ui.estimation import calculate_time_remaining
@@ -34,12 +35,12 @@ class HistoryGraph(QWidget):
     def _get_battery_color(self, percent: int | None) -> str:
         """Return the hex color for a given battery percentage (green -> yellow -> red)."""
         if percent is None:
-            return "#888888"
+            return theme.c("#888888")
         if percent <= 8:
-            return "#EE6800"  # critical red-orange
+            return theme.c("#EE6800")  # critical red-orange
         if percent <= 45:
-            return "#F0BB66"  # warning yellow/amber
-        return "#4CAF50"      # high green
+            return theme.c("#F0BB66")  # warning yellow/amber
+        return theme.c("#4CAF50")      # high green
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         p = QPainter(self)
@@ -64,14 +65,14 @@ class HistoryGraph(QWidget):
             y = margin_top + graph_h - (pct * graph_h // 100)
             
             # Grid line
-            grid_pen = QPen(QColor("#2a2a38"))
+            grid_pen = QPen(QColor(theme.c("#2a2a38")))
             grid_pen.setStyle(Qt.PenStyle.DashLine)
             grid_pen.setWidth(1)
             p.setPen(grid_pen)
             p.drawLine(margin_left, y, w - margin_right, y)
             
             # Label
-            p.setPen(QColor("#555566"))
+            p.setPen(QColor(theme.c("#555566")))
             p.drawText(
                 margin_left - 45, y - 8, 40, 16,
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -117,7 +118,7 @@ class HistoryGraph(QWidget):
         if not self._history:
             font = QFont("Segoe UI", 11)
             p.setFont(font)
-            p.setPen(QColor("#666677"))
+            p.setPen(QColor(theme.c("#666677")))
             p.drawText(
                 QRectF(margin_left, margin_top, graph_w, graph_h),
                 Qt.AlignmentFlag.AlignCenter,
@@ -160,8 +161,8 @@ class HistoryGraph(QWidget):
             if len(points) >= 1:
                 # Determine colors based on latest battery level, or use a premium blue/purple theme
                 # Let's use a sleek modern neon blue to purple gradient
-                theme_color1 = QColor("#7B9FFF") # Neon Blue
-                theme_color2 = QColor("#B67BFF") # Purple
+                theme_color1 = QColor(theme.c("#7B9FFF")) # Neon Blue
+                theme_color2 = QColor(theme.c("#B67BFF")) # Purple
                 
                 # ── Gradient Fill Area ──
                 fill_path = QPainterPath()
@@ -235,7 +236,7 @@ class HistoryGraph(QWidget):
                 p.drawEllipse(last_pt, 3, 3)
 
         # Draw X-axis labels
-        p.setPen(QColor("#888899"))
+        p.setPen(QColor(theme.c("#888899")))
         p.setFont(QFont("Segoe UI", 9))
         
         dt_min = datetime.datetime.fromtimestamp(t_min)
@@ -270,7 +271,7 @@ class HistoryGraph(QWidget):
             latest_time = datetime.datetime.fromisoformat(latest["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
             title_font = QFont("Segoe UI", 11, QFont.Weight.Bold)
             p.setFont(title_font)
-            p.setPen(QColor("#FFFFFF"))
+            p.setPen(QColor(theme.c("#FFFFFF")))
             p.drawText(
                 margin_left, 10, graph_w, 24,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
@@ -278,7 +279,7 @@ class HistoryGraph(QWidget):
             )
             sub_font = QFont("Segoe UI", 9)
             p.setFont(sub_font)
-            p.setPen(QColor("#888899"))
+            p.setPen(QColor(theme.c("#888899")))
             p.drawText(
                 margin_left, 10, graph_w, 24,
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,

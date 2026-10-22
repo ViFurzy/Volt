@@ -2,6 +2,7 @@
 from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QStyle,
@@ -15,7 +16,9 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
+from ui import theme
 from ui.settings_manager import is_startup_enabled, load_config, save_config, set_startup
+from ui.styles import apply_style
 from ui.updater import UpdaterWorker
 from __version__ import __version__
 
@@ -87,7 +90,7 @@ class _TogglePill(QWidget):
         r = self._H // 2 - self._MARGIN
         cy = self._H // 2
         cx = int(self._cx)
-        p.setBrush(QBrush(QColor("#FFFFFF")))
+        p.setBrush(QBrush(QColor(theme.c("#FFFFFF"))))
         p.drawEllipse(cx - r, cy - r, 2 * r, 2 * r)
 
 
@@ -256,6 +259,11 @@ class SettingsPage(QWidget):
         global_layout.setContentsMargins(16, 16, 16, 16)
         global_layout.setSpacing(16)
 
+        self._style_combo = ComboRow("Style", [t["name"] for t in theme.THEMES.values()])
+        self._style_combo.setCurrentIndex(list(theme.THEMES).index(theme.current()))
+        self._style_combo.currentIndexChanged.connect(self._on_style_changed)
+        global_layout.addWidget(self._style_combo)
+
         self._startup_cb = ToggleSwitch("Launch at startup")
         global_layout.addWidget(self._startup_cb)
 
@@ -415,6 +423,16 @@ class SettingsPage(QWidget):
         self._widget_layout_mode_combo.setCurrentIndex(mode_idx)
         self._widget_layout_mode_combo.blockSignals(False)
 
+    def _on_style_changed(self, index: int) -> None:
+        name = theme.set_theme(list(theme.THEMES)[index])
+        cfg = load_config()
+        cfg["ui_style"] = name
+        save_config(cfg)
+        apply_style(QApplication.instance())
+        if self._window and getattr(self._window, "_widget", None):
+            self._window._widget.rebuild_layout()
+            self._window._widget.set_opacity()
+            self._window.sync_widget()
     def _on_startup_toggled(self, checked: bool) -> None:
         set_startup(checked)
         cfg = load_config()

@@ -19,7 +19,8 @@ from ui.icon import make_volt_icon
 from ui.main_window import MainWindow
 from ui.notification_manager import NotificationManager
 from ui.settings_manager import load_config
-from ui.styles import DARK_QSS
+from ui import theme
+from ui.styles import apply_style
 from ui.tray import TrayManager
 
 
@@ -44,7 +45,8 @@ def main() -> None:
 
     qapp = QApplication(sys.argv)
     qapp.setQuitOnLastWindowClosed(False)  # REQUIRED: keeps process alive when window hides (Pitfall 2)
-    qapp.setStyleSheet(DARK_QSS)
+    theme.set_theme(load_config()["ui_style"])
+    apply_style(qapp)
 
     _icon = make_volt_icon()
     qapp.setWindowIcon(_icon)

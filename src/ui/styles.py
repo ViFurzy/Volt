@@ -297,3 +297,53 @@ QComboBox QAbstractItemView {
 }
 """
 
+
+def build_qss() -> str:
+    """DARK_QSS remapped to the active UI style (see ui.theme)."""
+    from ui import theme
+    return theme.themed(DARK_QSS).replace('"Segoe UI", "Inter", sans-serif', theme.font())
+
+
+_patched = False
+
+
+def _load_fonts() -> None:
+    """Register the bundled Geist / Doto / Space Mono fonts (src/assets/fonts)."""
+    from pathlib import Path
+    from PySide6.QtGui import QFontDatabase
+    for f in (Path(__file__).resolve().parent.parent / "assets" / "fonts").glob("*.ttf"):
+        QFontDatabase.addApplicationFont(str(f))
+
+
+def apply_style(app) -> None:
+    """Apply the active UI style to `app` and every widget with an inline stylesheet.
+
+    Inline setStyleSheet() calls hardcode legacy colours, so QWidget.setStyleSheet is
+    wrapped once: it keeps the raw text and re-themes it, which lets a style switch
+    re-apply all of them without touching each call site.
+    """
+    global _patched
+    from PySide6.QtGui import QFont
+    from PySide6.QtWidgets import QWidget
+    from ui import theme
+    if not _patched:
+        orig = QWidget.setStyleSheet
+
+        def set_style_sheet(self, qss):
+            self._raw_qss = qss
+            orig(self, theme.themed(qss))
+
+        QWidget.setStyleSheet = set_style_sheet
+        _patched = True
+        _load_fonts()
+    # Subpixel AA leaves coloured fringes on dot glyphs over the translucent widget
+    f = app.font()
+    f.setStyleStrategy(QFont.StyleStrategy.NoSubpixelAntialias)
+    app.setFont(f)
+    app.setStyleSheet(build_qss())
+    for w in app.allWidgets():
+        raw = getattr(w, "_raw_qss", None)
+        if raw is not None:
+            w.setStyleSheet(raw)
+        w.update()  # custom paintEvents read theme colours
+

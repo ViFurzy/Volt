@@ -32,6 +32,7 @@ def test_load_config_returns_defaults_when_file_absent(tmp_path, monkeypatch):
         "monitored_devices": [],
         "custom_hid_devices": [],
         "ignored_devices": [],
+        "ui_style": "inspector",
     }
 
 
@@ -52,6 +53,7 @@ def test_load_config_returns_defaults_on_malformed_json(tmp_path, monkeypatch):
         "monitored_devices": [],
         "custom_hid_devices": [],
         "ignored_devices": [],
+        "ui_style": "inspector",
     }
 
 
@@ -72,6 +74,7 @@ def test_save_and_load_config_roundtrip(tmp_path, monkeypatch):
         "monitored_devices": [],
         "custom_hid_devices": [],
         "ignored_devices": [],
+        "ui_style": "inspector",
     }
 
 

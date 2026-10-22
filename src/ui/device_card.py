@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from monitor.state import DeviceStatus
+from ui import theme
 from ui.settings_manager import battery_color
 
 if TYPE_CHECKING:
@@ -87,16 +88,16 @@ class BatteryGauge(QWidget):
 
     def _arc_color(self) -> str:
         if self._offline:
-            return "#555566"
+            return theme.c("#555566")
         if self._charging:
-            return "#4FC3F7"
+            return theme.c("#4FC3F7")
         if self._percent is None:
-            return "#555566"
+            return theme.c("#555566")
         if self._percent <= 8:
-            return "#EE6800"
+            return theme.c("#EE6800")
         if self._percent <= 45:
-            return "#F0BB66"
-        return "#4CAF50"
+            return theme.c("#F0BB66")
+        return theme.c("#4CAF50")
 
     def _state_label(self) -> str:
         if self._offline:
@@ -120,7 +121,7 @@ class BatteryGauge(QWidget):
         rect = QRectF(m, m, sz - 2 * m, sz - 2 * m)
 
         # Background track
-        bg_pen = QPen(QColor("#2a2a3a"))
+        bg_pen = QPen(QColor(theme.c("#2a2a3a")))
         bg_pen.setWidth(self.STROKE)
         bg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(bg_pen)
@@ -174,7 +175,7 @@ class BatteryGauge(QWidget):
             font.setPointSize(18)
             font.setBold(True)
             p.setFont(font)
-            p.setPen(QColor("#666677"))
+            p.setPen(QColor(theme.c("#666677")))
             p.drawText(
                 QRectF(0, 0, sz, sz),
                 Qt.AlignmentFlag.AlignCenter,

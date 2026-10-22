@@ -31,6 +31,7 @@ _DEFAULTS: dict = {
     "monitored_devices": [],  # list[dict] with keys: id, name, type, ble_address
     "custom_hid_devices": [],  # list[dict] with keys: vid, pid, name, driver (e.g. "logitech" or "steelseries")
     "ignored_devices": [],     # list[str] of ignored device IDs (e.g. "hid:1038:1852")
+    "ui_style": "inspector",   # "inspector" | "dotmatrix" (see ui.theme)
 }
 
 # ---------------------------------------------------------------------------

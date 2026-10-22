@@ -251,6 +251,24 @@ def test_enter_widget_mode_keeps_main_when_show_beside_true(qapp, mock_window_co
     window._widget.show.assert_called_once()
 
 
+def test_toggle_widget_never_hides_main_window(qapp, mock_window_config, mocker):
+    """toggle_widget shows the widget, then hides it, leaving MainWindow alone."""
+    from ui.main_window import MainWindow
+
+    window = MainWindow()
+    mocker.patch.object(window, "hide")
+    mocker.patch.object(window._widget, "show")
+    mocker.patch.object(window._widget, "hide")
+    mocker.patch.object(window._widget, "isVisible", side_effect=[False, True])
+
+    window.toggle_widget()
+    window.toggle_widget()
+
+    window._widget.show.assert_called_once()
+    window._widget.hide.assert_called_once()
+    window.hide.assert_not_called()
+
+
 def test_exit_widget_mode_restores_main_if_hidden(qapp, mock_window_config, mocker):
     """exit_widget_mode hides widget, and restores MainWindow if it was hidden."""
     from ui.main_window import MainWindow
