@@ -294,7 +294,7 @@ class VerticalBlockRowUI(QWidget):
                 p.setBrush(QColor(color))
                 p.drawRoundedRect(QRectF(bar_x, fill_y, bar_w, fill_h), bar_w/2.0, bar_w/2.0)
 
-        icon_sz = 44 * scale
+        icon_sz = 44 * scale if dots else 30 * scale  # Inspector: smaller icon, room for the %
         cx = bar_x + bar_w + (rect.width() - (bar_x + bar_w)) / 2.0
         cy = bar_y + icon_sz / 2.0 + 2 * scale
         live = not self._offline and self._percent is not None
@@ -310,6 +310,13 @@ class VerticalBlockRowUI(QWidget):
             p.drawText(num_rect, Qt.AlignmentFlag.AlignCenter, f"{self._percent:02d}" if live else "--")
         else:
             draw_device_icon(p, self._category, cx, cy, icon_sz, color if live else theme.c("#555566"))
+            pct_font = QFont(theme.family())
+            pct_font.setPixelSize(max(9, int(18 * scale)))
+            pct_font.setWeight(QFont.Weight.Bold)
+            p.setFont(pct_font)
+            p.setPen(QColor(color if live else theme.c("#555566")))
+            pct_rect = QRectF(bar_x + bar_w, cy + icon_sz / 2.0 + 2 * scale, rect.width() - (bar_x + bar_w), 24 * scale)
+            p.drawText(pct_rect, Qt.AlignmentFlag.AlignCenter, f"{self._percent}%" if live else "--")
 
         p.setPen(QColor(theme.c("#FFFFFF")) if not self._offline else QColor(theme.c("#555566")))
         font = QFont(theme.family())
@@ -320,7 +327,8 @@ class VerticalBlockRowUI(QWidget):
         if len(display_name) > 10:
             display_name = display_name[:8] + ".."
         
-        text_rect = QRectF(bar_x + bar_w, cy + icon_sz/2.0 + 4*scale, rect.width() - (bar_x + bar_w), rect.height() - (cy + icon_sz/2.0 + 4*scale))
+        name_y = cy + icon_sz / 2.0 + (4 if dots else 28) * scale
+        text_rect = QRectF(bar_x + bar_w, name_y, rect.width() - (bar_x + bar_w), rect.height() - name_y)
         p.drawText(text_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, display_name)
 
 
